@@ -73,6 +73,25 @@ std::string base58_encode(const unsigned char* bytes, size_t len) {
     return result;
 }
 
+std::string base64_encode(const unsigned char* data, size_t len) {
+    static const char* b64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string result;
+    result.reserve(((len + 2) / 3) * 4);
+
+    for (size_t i = 0; i < len; i += 3) {
+        unsigned int val = (data[i] << 16);
+        if (i + 1 < len) val |= (data[i + 1] << 8);
+        if (i + 2 < len) val |= data[i + 2];
+
+        result.push_back(b64chars[(val >> 18) & 0x3F]);
+        result.push_back(b64chars[(val >> 12) & 0x3F]);
+        result.push_back((i + 1 < len) ? b64chars[(val >> 6) & 0x3F] : '=');
+        result.push_back((i + 2 < len) ? b64chars[val & 0x3F] : '=');
+    }
+
+    return result;
+}
+
 std::string base64url_decode(const std::string& in) {
     std::string s = in;
     for (char& c : s) {

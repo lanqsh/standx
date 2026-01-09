@@ -54,6 +54,11 @@ int main() {
         standx::StandXClient client(chain, private_key);
         std::cout << "Address: " << client.get_address() << "\n\n";
 
+        // Query symbol price (no auth required)
+        std::cout << "Querying ETH-USD price...\n";
+        std::string price = client.query_symbol_price("ETH-USD");
+        std::cout << "Symbol Price:\n" << price << "\n\n";
+
         // Login
         std::cout << "Logging in...\n";
         std::string token = client.login();
@@ -69,8 +74,33 @@ int main() {
         std::string order = client.query_order(784080731);
         std::cout << "Order:\n" << order << "\n\n";
 
-        // Query positions (optional)
-        // std::string positions = client.query_positions("ETH-USD");
+        // Query open orders
+        std::cout << "Querying open orders...\n";
+        std::string open_orders = client.query_open_orders();
+        std::cout << "Open Orders:\n" << open_orders << "\n\n";
+
+        // Query positions
+        std::cout << "Querying positions for ETH-USD...\n";
+        std::string positions = client.query_positions("ETH-USD");
+        std::cout << "Positions:\n" << positions << "\n\n";
+
+        // Create new order
+        // std::cout << "Creating new order: ETH-USD limit buy @ 3000, qty=0.001...\n";
+        // std::string new_order_result = client.new_order(
+        //     "ETH-USD",      // symbol
+        //     "buy",          // side (多单)
+        //     "limit",        // order_type
+        //     "0.001",        // qty
+        //     "alo",          // time_in_force
+        //     false,          // reduce_only
+        //     "3000"          // price
+        // );
+        // std::cout << "New Order Result:\n" << new_order_result << "\n\n";
+
+        // Cancel order
+        std::cout << "Canceling order 792209018...\n";
+        std::string cancel_result = client.cancel_order(792209018);
+        std::cout << "Cancel Order Result:\n" << cancel_result << "\n\n";
 
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << "\n";

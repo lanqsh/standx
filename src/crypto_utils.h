@@ -17,6 +17,9 @@ std::string bytes_to_hex(const unsigned char* data, size_t len);
 // Base58 encode
 std::string base58_encode(const unsigned char* bytes, size_t len);
 
+// Base64 encode
+std::string base64_encode(const unsigned char* data, size_t len);
+
 // Base64url decode
 std::string base64url_decode(const std::string& in);
 

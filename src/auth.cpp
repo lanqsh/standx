@@ -19,6 +19,8 @@ namespace standx {
 
 struct AuthManager::Impl {
     secp256k1_context* ctx;
+    unsigned char ed25519_pk[crypto_sign_PUBLICKEYBYTES];  // Ed25519 public key
+    unsigned char ed25519_sk[crypto_sign_SECRETKEYBYTES];  // Ed25519 secret key
 
     Impl() {
         ctx = secp256k1_context_create(SECP256K1_CONTEXT_SIGN | SECP256K1_CONTEXT_VERIFY);
@@ -35,6 +37,9 @@ AuthManager::AuthManager(const std::string& chain)
     if (sodium_init() < 0) {
         throw std::runtime_error("libsodium init failed");
     }
+
+    // Generate independent Ed25519 keypair for request signing
+    crypto_sign_keypair(impl_->ed25519_pk, impl_->ed25519_sk);
 }
 
 AuthManager::~AuthManager() {
@@ -69,11 +74,8 @@ std::string AuthManager::login(int expires_seconds) {
         throw std::runtime_error("private key not set");
     }
 
-    // 1) Generate ed25519 keypair for requestId
-    unsigned char pk[crypto_sign_PUBLICKEYBYTES];
-    unsigned char sk[crypto_sign_SECRETKEYBYTES];
-    crypto_sign_keypair(pk, sk);
-    std::string request_id = base58_encode(pk, crypto_sign_PUBLICKEYBYTES);
+    // 1) Use Ed25519 public key as requestId (base58 encoded)
+    std::string request_id = base58_encode(impl_->ed25519_pk, crypto_sign_PUBLICKEYBYTES);
 
     // 2) Call prepare-signin
     HttpClient http;
@@ -115,7 +117,33 @@ std::string AuthManager::login(int expires_seconds) {
         throw std::runtime_error("payload.message empty");
     }
 
-    // 5) Sign message (EIP-191 personal_sign)
+    // 5) Sign message using EIP-191 personal_sign
+    std::string signature = sign_message(message);
+
+    // 6) Submit login
+    std::string login_url = auth_base_url_ + "/v1/offchain/login?chain=" + chain_;
+    json jlogin;
+    jlogin["signature"] = signature;
+    jlogin["signedData"] = signed_data;
+    jlogin["expiresSeconds"] = expires_seconds;
+
+    std::string login_resp = http.post_json(login_url, jlogin.dump());
+    json jlogin_resp = json::parse(login_resp);
+
+    std::string access_token = jlogin_resp.value("accessToken", jlogin_resp.value("token", ""));
+    if (access_token.empty()) {
+        throw std::runtime_error("login failed: " + login_resp);
+    }
+
+    return access_token;
+}
+
+std::string AuthManager::sign_message(const std::string& message) {
+    if (private_key_bytes_.empty()) {
+        throw std::runtime_error("private key not set");
+    }
+
+    // EIP-191 personal_sign
     std::string prefix;
     prefix.push_back((char)0x19);
     prefix += "Ethereum Signed Message:\n" + std::to_string(message.size());
@@ -136,24 +164,108 @@ std::string AuthManager::login(int expires_seconds) {
     unsigned char outsig[65];
     memcpy(outsig, sig64, 64);
     outsig[64] = (unsigned char)(recid + 27);
-    std::string signature = "0x" + bytes_to_hex(outsig, 65);
+    return "0x" + bytes_to_hex(outsig, 65);
+}
 
-    // 6) Submit login
-    std::string login_url = auth_base_url_ + "/v1/offchain/login?chain=" + chain_;
-    json jlogin;
-    jlogin["signature"] = signature;
-    jlogin["signedData"] = signed_data;
-    jlogin["expiresSeconds"] = expires_seconds;
-
-    std::string login_resp = http.post_json(login_url, jlogin.dump());
-    json jlogin_resp = json::parse(login_resp);
-
-    std::string access_token = jlogin_resp.value("accessToken", jlogin_resp.value("token", ""));
-    if (access_token.empty()) {
-        throw std::runtime_error("login failed: " + login_resp);
+std::string AuthManager::sign_message_base64(const std::string& message) {
+    if (private_key_bytes_.empty()) {
+        throw std::runtime_error("private key not set");
     }
 
-    return access_token;
+    // EIP-191 personal_sign
+    std::string prefix;
+    prefix.push_back((char)0x19);
+    prefix += "Ethereum Signed Message:\n" + std::to_string(message.size());
+    std::string prefixed = prefix + message;
+
+    unsigned char msghash[32];
+    keccak256((const unsigned char*)prefixed.data(), prefixed.size(), msghash);
+
+    secp256k1_ecdsa_recoverable_signature sig;
+    if (!secp256k1_ecdsa_sign_recoverable(impl_->ctx, &sig, msghash, private_key_bytes_.data(), NULL, NULL)) {
+        throw std::runtime_error("secp256k1 sign failed");
+    }
+
+    unsigned char sig64[64];
+    int recid = 0;
+    secp256k1_ecdsa_recoverable_signature_serialize_compact(impl_->ctx, sig64, &recid, &sig);
+
+    unsigned char outsig[65];
+    memcpy(outsig, sig64, 64);
+    outsig[64] = (unsigned char)(recid + 27);
+
+    // Base64 encode
+    return base64_encode(outsig, 65);
+}
+
+std::string AuthManager::sign_hash_base64(const std::string& message) {
+    if (private_key_bytes_.empty()) {
+        throw std::runtime_error("private key not set");
+    }
+
+    // Direct keccak256 hash (no EIP-191 prefix)
+    unsigned char msghash[32];
+    keccak256((const unsigned char*)message.data(), message.size(), msghash);
+
+    secp256k1_ecdsa_recoverable_signature sig;
+    if (!secp256k1_ecdsa_sign_recoverable(impl_->ctx, &sig, msghash, private_key_bytes_.data(), NULL, NULL)) {
+        throw std::runtime_error("secp256k1 sign failed");
+    }
+
+    unsigned char sig64[64];
+    int recid = 0;
+    secp256k1_ecdsa_recoverable_signature_serialize_compact(impl_->ctx, sig64, &recid, &sig);
+
+    unsigned char outsig[65];
+    memcpy(outsig, sig64, 64);
+    outsig[64] = (unsigned char)(recid + 27);  // Ethereum convention
+
+    // Base64 encode
+    return base64_encode(outsig, 65);
+}
+
+std::string AuthManager::sign_ecdsa_64_base64(const std::string& message) {
+    if (private_key_bytes_.empty()) {
+        throw std::runtime_error("private key not set");
+    }
+
+    // Direct keccak256 hash
+    unsigned char msghash[32];
+    keccak256((const unsigned char*)message.data(), message.size(), msghash);
+
+    // Standard ECDSA signature (not recoverable)
+    secp256k1_ecdsa_signature sig;
+    if (!secp256k1_ecdsa_sign(impl_->ctx, &sig, msghash, private_key_bytes_.data(), NULL, NULL)) {
+        throw std::runtime_error("secp256k1 sign failed");
+    }
+
+    // Serialize to compact format (64 bytes: r + s)
+    unsigned char sig64[64];
+    secp256k1_ecdsa_signature_serialize_compact(impl_->ctx, sig64, &sig);
+
+    // Base64 encode (only 64 bytes, no recovery id)
+    return base64_encode(sig64, 64);
+}
+
+std::string AuthManager::sign_ed25519_base64(const std::string& message) {
+    if (private_key_bytes_.empty()) {
+        throw std::runtime_error("private key not set");
+    }
+
+    // Ed25519 signature (64 bytes)
+    unsigned char signature[crypto_sign_BYTES];
+    unsigned long long sig_len;
+
+    crypto_sign_detached(
+        signature,
+        &sig_len,
+        (const unsigned char*)message.data(),
+        message.size(),
+        impl_->ed25519_sk
+    );
+
+    // Base64 encode (64 bytes)
+    return base64_encode(signature, crypto_sign_BYTES);
 }
 
 bool AuthManager::verify_jwt(const std::string& signed_data) {
