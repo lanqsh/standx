@@ -10,15 +10,9 @@
 - 使用 `accessToken` 调用用户指定的持仓查询接口。
 
 依赖
-- CMake
-- libsodium (生成 ed25519)
-- libcurl
-- nlohmann/json (开发包，头文件 `nlohmann/json.hpp`)
-- Node.js + npm
-- 在项目目录安装 ethers: `npm install ethers`
 
 如果使用纯 C++ 签名（默认已实现），需要额外依赖：
-- `libsecp256k1`（用于 secp256k1 签名/恢复）
+ - `libsecp256k1`（用于 secp256k1 签名/恢复）、`OpenSSL`（用于 `signedData` 的 ES256 验证）
 
 在 Linux 上可以用包管理器安装或从源码编译 `libsecp256k1`。示例：
 
@@ -28,6 +22,15 @@ sudo apt install libsecp256k1-dev
 ```
 
 如果你不想安装 `libsecp256k1`，可以继续使用 Node/ethers 签名（示例中的旧实现已移除）。
+
+配置 (.env)
+
+在项目根目录创建一个 `.env` 文件（或者先复制 `.env.example`）：
+
+```bash
+cp .env.example .env
+# 编辑 .env，填写 WALLET_PRIVATE_KEY_HEX 等字段
+```
 
 构建示例
 

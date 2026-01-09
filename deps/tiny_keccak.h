@@ -6,6 +6,14 @@
 
 #include <stddef.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 void keccak_256(const unsigned char *in, size_t inlen, unsigned char *out);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

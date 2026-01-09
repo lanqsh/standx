@@ -1,69 +1,101 @@
-/* tiny_keccak.c - minimal Keccak-256
-   This is a compact implementation adapted for example purposes.
+/* tiny_keccak.c - Correct Keccak-256 implementation
+   Based on the official Keccak specification
    Public domain.
 */
 #include "tiny_keccak.h"
 #include <string.h>
 
-/* Keccak-f[1600] implementation adapted from public domain tiny implementations. */
 typedef unsigned long long u64;
 
-static inline u64 rol(u64 x, unsigned int y) { return (x << y) | (x >> (64 - y)); }
+#define ROL64(a, offset) ((a << offset) ^ (a >> (64-offset)))
 
-static void keccakf(u64 st[25]) {
-    static const u64 RC[24] = {
-        0x0000000000000001ULL,0x0000000000008082ULL,0x800000000000808aULL,0x8000000080008000ULL,
-        0x000000000000808bULL,0x0000000080000001ULL,0x8000000080008081ULL,0x8000000000008009ULL,
-        0x000000000000008aULL,0x0000000000000088ULL,0x0000000080008009ULL,0x000000008000000aULL,
-        0x000000008000808bULL,0x800000000000008bULL,0x8000000000008089ULL,0x8000000000008003ULL,
-        0x8000000000008002ULL,0x8000000000000080ULL,0x000000000000800aULL,0x800000008000000aULL,
-        0x8000000080008081ULL,0x8000000000008080ULL,0x0000000080000001ULL,0x8000000080008008ULL
-    };
-    int round;
-    for (round = 0; round < 24; ++round) {
-        u64 C[5];
-        for (int x = 0; x < 5; ++x) C[x] = st[x] ^ st[x + 5] ^ st[x + 10] ^ st[x + 15] ^ st[x + 20];
-        for (int x = 0; x < 5; ++x) {
-            u64 d = C[(x + 4) % 5] ^ rol(C[(x + 1) % 5], 1);
-            for (int y = 0; y < 25; y += 5) st[y + x] ^= d;
+static const u64 keccakf_rndc[24] = {
+    0x0000000000000001ULL, 0x0000000000008082ULL, 0x800000000000808aULL,
+    0x8000000080008000ULL, 0x000000000000808bULL, 0x0000000080000001ULL,
+    0x8000000080008081ULL, 0x8000000000008009ULL, 0x000000000000008aULL,
+    0x0000000000000088ULL, 0x0000000080008009ULL, 0x000000008000000aULL,
+    0x000000008000808bULL, 0x800000000000008bULL, 0x8000000000008089ULL,
+    0x8000000000008003ULL, 0x8000000000008002ULL, 0x8000000000000080ULL,
+    0x000000000000800aULL, 0x800000008000000aULL, 0x8000000080008081ULL,
+    0x8000000000008080ULL, 0x0000000080000001ULL, 0x8000000080008008ULL
+};
+
+static const int keccakf_rotc[24] = {
+    1,  3,  6,  10, 15, 21, 28, 36, 45, 55, 2,  14,
+    27, 41, 56, 8,  25, 43, 62, 18, 39, 61, 20, 44
+};
+
+static const int keccakf_piln[24] = {
+    10, 7,  11, 17, 18, 3, 5,  16, 8,  21, 24, 4,
+    15, 23, 19, 13, 12, 2, 20, 14, 22, 9,  6,  1
+};
+
+static void keccakf(u64 s[25]) {
+    int i, j, round;
+    u64 t, bc[5];
+
+    for (round = 0; round < 24; round++) {
+        // Theta
+        for (i = 0; i < 5; i++)
+            bc[i] = s[i] ^ s[i + 5] ^ s[i + 10] ^ s[i + 15] ^ s[i + 20];
+
+        for (i = 0; i < 5; i++) {
+            t = bc[(i + 4) % 5] ^ ROL64(bc[(i + 1) % 5], 1);
+            for (j = 0; j < 25; j += 5)
+                s[j + i] ^= t;
         }
-        u64 B[25];
-        for (int x = 0; x < 5; ++x) for (int y = 0; y < 5; ++y) B[y*5 + ((2*x + 3*y) % 5)] = rol(st[y*5 + x], (unsigned int)((((x*2)+y*3)%5)*((y*2)+x)%64));
-        for (int i = 0; i < 25; ++i) st[i] = B[i];
-        for (int j = 0; j < 25; ++j) st[j] ^= RC[round] & (j==0);
-        /* Above is intentionally simple and not fully optimized; adequate for demonstration. */
+
+        // Rho Pi
+        t = s[1];
+        for (i = 0; i < 24; i++) {
+            j = keccakf_piln[i];
+            bc[0] = s[j];
+            s[j] = ROL64(t, keccakf_rotc[i]);
+            t = bc[0];
+        }
+
+        // Chi
+        for (j = 0; j < 25; j += 5) {
+            for (i = 0; i < 5; i++)
+                bc[i] = s[j + i];
+            for (i = 0; i < 5; i++)
+                s[j + i] ^= (~bc[(i + 1) % 5]) & bc[(i + 2) % 5];
+        }
+
+        // Iota
+        s[0] ^= keccakf_rndc[round];
     }
 }
 
 void keccak_256(const unsigned char *in, size_t inlen, unsigned char *out) {
-    unsigned char temp[200];
-    memset(temp, 0, sizeof(temp));
-    unsigned long long st[25];
-    memset(st, 0, sizeof(st));
-    size_t rate = 136; // 1088 bits
-    size_t i = 0;
+    u64 s[25];
+    unsigned char temp[144];
+    size_t rate = 136; // 1088 / 8 for Keccak-256
+    size_t i;
+
+    memset(s, 0, sizeof(s));
+
+    // Absorb
     while (inlen >= rate) {
-        for (size_t j = 0; j < rate/8; ++j) {
-            u64 t = 0;
-            for (int k = 0; k < 8; ++k) t |= (u64)in[i + j*8 + k] << (8*k);
-            st[j] ^= t;
+        for (i = 0; i < rate / 8; i++) {
+            s[i] ^= ((u64*)in)[i];
         }
-        keccakf(st);
-        inlen -= rate; i += rate;
+        keccakf(s);
+        in += rate;
+        inlen -= rate;
     }
-    unsigned char block[136]; memset(block, 0, sizeof(block));
-    if (inlen) memcpy(block, in + i, inlen);
-    block[inlen] = 0x01;
-    block[rate-1] |= 0x80;
-    for (size_t j = 0; j < rate/8; ++j) {
-        u64 t = 0;
-        for (int k = 0; k < 8; ++k) t |= (u64)block[j*8 + k] << (8*k);
-        st[j] ^= t;
+
+    // Last block
+    memset(temp, 0, sizeof(temp));
+    memcpy(temp, in, inlen);
+    temp[inlen] = 0x01;
+    temp[rate - 1] |= 0x80;
+
+    for (i = 0; i < rate / 8; i++) {
+        s[i] ^= ((u64*)temp)[i];
     }
-    keccakf(st);
-    // squeeze
-    for (size_t j = 0; j < 32/8; ++j) {
-        u64 t = st[j];
-        for (int k = 0; k < 8; ++k) out[j*8 + k] = (unsigned char)((t >> (8*k)) & 0xFF);
-    }
+    keccakf(s);
+
+    // Squeeze
+    memcpy(out, s, 32);
 }
