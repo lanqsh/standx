@@ -30,7 +30,6 @@ std::string HttpClient::perform_request_internal(const std::string& url, void* h
 
     struct curl_slist* headers = (struct curl_slist*)headers_ptr;
 
-    // Debug output
     std::cout << "\n=== HTTP Request Debug ===";
     std::cout << "\nURL: " << url;
     std::cout << "\nMethod: " << (method ? method : "GET");
@@ -49,19 +48,16 @@ std::string HttpClient::perform_request_internal(const std::string& url, void* h
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
 
-    // Set custom HTTP method if specified
     if (method) {
         curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, method);
     }
 
-    // Set POST data if provided
     if (post_data) {
         curl_easy_setopt(curl, CURLOPT_POSTFIELDS, post_data);
     }
 
     CURLcode res = curl_easy_perform(curl);
 
-    // Get HTTP response code
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &last_response_code_);
 
     curl_slist_free_all(headers);
@@ -70,17 +66,13 @@ std::string HttpClient::perform_request_internal(const std::string& url, void* h
         throw std::runtime_error("curl request failed: " + std::string(curl_easy_strerror(res)));
     }
 
-    // Auto retry on 401 if callback is set
     if (retry_on_401 && last_response_code_ == 401 && token_refresh_callback_) {
-        // Refresh token
         std::string new_token = token_refresh_callback_();
 
-        // Rebuild headers with new token
         struct curl_slist* new_headers = nullptr;
         std::string auth_header = "Authorization: Bearer " + new_token;
         new_headers = curl_slist_append(new_headers, auth_header.c_str());
 
-        // Copy other headers (Content-Type, Accept, etc.)
         if (method && std::string(method) == "POST") {
             new_headers = curl_slist_append(new_headers, "Content-Type: application/json");
         } else if (method && std::string(method) == "DELETE") {
@@ -89,7 +81,6 @@ std::string HttpClient::perform_request_internal(const std::string& url, void* h
             new_headers = curl_slist_append(new_headers, "Accept: application/json");
         }
 
-        // Retry request with new token (no further retry)
         return perform_request_internal(url, new_headers, method, post_data, false);
     }
 
@@ -97,7 +88,6 @@ std::string HttpClient::perform_request_internal(const std::string& url, void* h
 }
 
 std::string HttpClient::perform_request(const std::string& url, void* headers_ptr, const char* method, const char* post_data) {
-    // Check if this is an authenticated request (has Authorization header)
     bool is_auth_request = false;
     struct curl_slist* headers = (struct curl_slist*)headers_ptr;
     for (struct curl_slist* h = headers; h != nullptr; h = h->next) {

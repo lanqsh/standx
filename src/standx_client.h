@@ -1,7 +1,11 @@
 #pragma once
 
-#include <string>
+#include <list>
 #include <memory>
+#include <string>
+#include <vector>
+
+#include "data.h"
 
 namespace standx {
 
@@ -9,55 +13,46 @@ class HttpClient;
 class AuthManager;
 
 class StandXClient {
-public:
-    StandXClient(const std::string& chain, const std::string& private_key_hex);
-    ~StandXClient();
+ public:
+  StandXClient(const std::string& chain, const std::string& private_key_hex,
+               const std::string& symbol);
+  ~StandXClient();
 
-    // Get user address
-    std::string get_address() const;
+  std::string get_address() const;
 
-    // Login and get access token
-    std::string login();
+  std::string getInstId() const { return symbol_; }
 
-    // Query account balance
-    std::string query_balance();
+  std::string login();
 
-    // Query positions
-    std::string query_positions(const std::string& symbol = "");
+  bool positions(std::vector<Position>& positions_list);
 
-    // Query order by order_id or cl_ord_id (at least one required)
-    std::string query_order(int order_id = -1, const std::string& cl_ord_id = "");
+  bool detail(Order& order);
 
-    // Query all open orders (optionally filtered by symbol)
-    std::string query_open_orders(const std::string& symbol = "");
+  bool unfilledOrders(std::list<Order>& order_list);
 
-    // Query symbol price (no authentication required)
-    std::string query_symbol_price(const std::string& symbol);
+  bool tickers(Ticker& tk);
 
-    // Create new order
-    std::string new_order(const std::string& symbol, const std::string& side,
-                          const std::string& order_type, const std::string& qty,
-                          const std::string& time_in_force, bool reduce_only,
-                          const std::string& price = "");
+  bool placeOrder(Order& order);
 
-    // Cancel order (at least one of order_id or cl_ord_id required)
-    std::string cancel_order(int order_id = -1, const std::string& cl_ord_id = "");
+  bool tpOrder(Order& order);
 
-    // Get current access token
-    std::string get_access_token() const { return access_token_; }
+  void cancelOrder(const std::string& id);
 
-    // Get auth manager (for signing)
-    AuthManager* get_auth_manager() const { return auth_.get(); }
+  std::string get_access_token() const { return access_token_; }
 
-private:
-    // Request with auto token refresh on 401
-    std::string request_with_retry(const std::string& url);
+  AuthManager* get_auth_manager() const { return auth_.get(); }
 
-    std::unique_ptr<HttpClient> http_;
-    std::unique_ptr<AuthManager> auth_;
-    std::string chain_;
-    std::string access_token_;
-    std::string api_base_url_;
+  bool balance(float& availBal, float& totalBal);
+
+ private:
+  std::string request_with_retry(const std::string& url);
+
+  std::unique_ptr<HttpClient> http_;
+  std::unique_ptr<AuthManager> auth_;
+  std::string chain_;
+  std::string symbol_;
+  std::string access_token_;
+  std::string api_base_url_;
 };
 
-} // namespace standx
+}  // namespace standx
