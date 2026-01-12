@@ -1,5 +1,9 @@
 # 🚀 StandX C++ Trading Client
 
+> ⚠️ **开发中项目 / Work In Progress**
+> 本项目正在积极开发中，API 接口可能随时变更。生产环境使用前请充分测试。
+> This project is under active development. APIs may change. Test thoroughly before production use.
+
 [English](#english) | [中文](#chinese)
 
 ---
@@ -9,7 +13,7 @@
 
 ### 📖 What is this?
 
-A **production-ready** C++ client for [StandX](https://standx.com) perpetual trading! 💪 This client handles everything from authentication to order management with **automatic token refresh** and **body signature verification**.
+A **C++ trading client** for [StandX](https://standx.com) perpetual trading with grid strategy support! 💪 This client handles authentication, order management, and implements automated grid trading strategies.
 
 ### ✨ Features
 
@@ -19,21 +23,29 @@ A **production-ready** C++ client for [StandX](https://standx.com) perpetual tra
 - Automatic token refresh on 401 errors
 
 📊 **Market Data**
-- Real-time symbol price queries (no auth required)
-- Account balance checking
-- Position monitoring
+- Real-time ticker price queries
+- Account balance checking (cross margin)
+- Position monitoring with side detection
 
 📈 **Order Management**
-- Create orders (Market, Limit, etc.)
-- Cancel orders by ID or client order ID
-- Query order status
-- Query open orders
+- Place orders with automatic side/type conversion
+- Place TP (Take Profit) orders with qty sign handling
+- Cancel orders by ID
+- Query order details with status mapping
+- Query unfilled orders
+
+⚡ **Grid Trading Strategy**
+- Long and short grid strategies
+- Automatic position management
+- TP order management
+- Configurable grid size and intervals
+- Multi-symbol support (BTC, ETH, SOL)
 
 🛠️ **Developer Friendly**
-- Modular architecture (crypto, http, auth, client)
-- CURL optimization with connection reuse
-- Detailed debug logging
-- Clean C++17 codebase
+- Modular architecture with clean separation
+- Custom logging system with tracer macros
+- Safe float/string conversion utilities
+- Modern C++17 codebase
 
 ### 🔧 Dependencies
 
@@ -41,6 +53,7 @@ A **production-ready** C++ client for [StandX](https://standx.com) perpetual tra
 - **libsodium** - For Ed25519 signatures
 - **libsecp256k1** - For Ethereum key operations
 - **libcurl** - For HTTP requests
+- **Poco** - For threading, datetime, and logging
 - **nlohmann/json** - For JSON parsing (header-only)
 
 #### 📦 Installation (Ubuntu/Debian)
@@ -53,13 +66,14 @@ sudo apt install -y \
     libssl-dev \
     libsodium-dev \
     libsecp256k1-dev \
-    libcurl4-openssl-dev
+    libcurl4-openssl-dev \
+    libpoco-dev
 ```
 
 #### 🍎 Installation (macOS)
 
 ```bash
-brew install openssl@3 libsodium secp256k1 curl
+brew install openssl@3 libsodium secp256k1 curl poco
 ```
 
 ### ⚙️ Configuration
@@ -87,28 +101,43 @@ cmake --build . --config Release
 #include "standx_client.h"
 
 int main() {
-    // Initialize client
-    standx::StandXClient client("bsc", "your_private_key");
+    // Initialize logger
+    logger::Tracer::Init();
+
+    // Initialize client with symbol
+    standx::StandXClient client("bsc", "your_private_key", "ETH-USD");
 
     // Login
     std::string token = client.login();
 
     // Query balance
-    std::string balance = client.query_balance();
+    float availBal = 0.0f, totalBal = 0.0f;
+    if (client.balance(availBal, totalBal)) {
+        INFO("Available: " << availBal << ", Total: " << totalBal);
+    }
 
-    // Create a limit order
-    std::string result = client.new_order(
-        "ETH-USD",    // symbol
-        "buy",        // side
-        "limit",      // order_type
-        "0.01",       // qty
-        "gtc",        // time_in_force
-        false,        // reduce_only
-        "3000"        // price
-    );
+    // Query positions
+    std::vector<Position> positions;
+    if (client.positions(positions)) {
+        for (const auto& pos : positions) {
+            INFO("Side: " << pos.positionSide << ", Amt: " << pos.positionAmt);
+        }
+    }
+
+    // Place order
+    Order order;
+    order.side = "BUY";
+    order.type = "LIMIT";
+    order.size = 0.01f;
+    order.price = 3000.0f;
+    order.is_reduce_only = false;
+
+    if (client.placeOrder(order)) {
+        INFO("Order placed: " << order.id);
+    }
 
     // Cancel order
-    client.cancel_order(792209018);
+    client.cancelOrder(order.id);
 
     return 0;
 }
@@ -121,38 +150,51 @@ int main() {
 ```cpp
 std::string login();                    // Login and get access token
 std::string get_address() const;        // Get your wallet address
+std::string getInstId() const;          // Get instrument ID (symbol)
 ```
 
 #### Market Data
 
 ```cpp
-std::string query_symbol_price(const std::string& symbol);  // Get symbol price
-std::string query_balance();                                 // Get account balance
-std::string query_positions(const std::string& symbol = ""); // Get positions
+bool tickers(Ticker& tk);                                    // Get ticker price
+bool balance(float& availBal, float& totalBal);              // Get account balance
+bool positions(std::vector<Position>& positions_list);       // Get positions
 ```
 
 #### Order Operations
 
 ```cpp
-// Create order
-std::string new_order(
-    const std::string& symbol,
-    const std::string& side,           // "buy" or "sell"
-    const std::string& order_type,     // "limit", "market", etc.
-    const std::string& qty,
-    const std::string& time_in_force,  // "gtc", "ioc", "fok", "alo"
-    bool reduce_only,
-    const std::string& price = ""      // Required for limit orders
-);
+// Place order
+bool placeOrder(Order& order);
 
-// Cancel order (provide order_id or cl_ord_id)
-std::string cancel_order(int order_id = -1, const std::string& cl_ord_id = "");
+// Place TP order (with qty sign based on side)
+bool tpOrder(Order& order);
 
-// Query order
-std::string query_order(int order_id = -1, const std::string& cl_ord_id = "");
+// Cancel order by ID
+void cancelOrder(const std::string& id);
 
-// Query open orders
-std::string query_open_orders(const std::string& symbol = "");
+// Query order detail
+bool detail(Order& order);
+
+// Query unfilled orders
+bool unfilledOrders(std::list<Order>& order_list);
+```
+
+#### Order Structure
+
+```cpp
+struct Order {
+    std::string id;              // Order ID (filled after placement)
+    std::string contract;        // Symbol
+    float size;                  // Quantity
+    float price;                 // Price
+    bool is_reduce_only;         // Reduce only flag
+    std::string status;          // NEW, FILLED, CANCELED, FAILED
+    std::string side;            // BUY, SELL
+    std::string positionSide;    // LONG, SHORT
+    std::string type;            // LIMIT, MARKET
+    // ... other fields
+};
 ```
 
 ### 🏗️ Architecture
@@ -161,12 +203,16 @@ std::string query_open_orders(const std::string& symbol = "");
 cpp_standx_client/
 ├── src/
 │   ├── crypto_utils.cpp/h    # 🔐 Crypto utilities (keccak256, base58, etc.)
-│   ├── http_client.cpp/h     # 🌐 HTTP client with CURL optimization
+│   ├── http_client.cpp/h     # 🌐 HTTP client with auto token refresh
 │   ├── auth.cpp/h            # 🔑 SIWE authentication & Ed25519 signing
 │   ├── standx_client.cpp/h   # 📊 Main trading client
+│   ├── strategy.cpp/h        # ⚡ Grid trading strategy
+│   ├── tracer.cpp/h          # 📝 Logging system
+│   ├── util.cpp/h            # 🛠️ Utility functions
+│   ├── data.h                # 📦 Data structures
+│   ├── defines.h             # 🔧 Constants and macros
 │   └── main.cpp              # 🎯 Example usage
-├── deps/                     # 📦 Embedded dependencies (tiny_keccak)
-└── CMakeLists.txt           # 🔧 Build configuration
+└── CMakeLists.txt            # 🔧 Build configuration
 ```
 
 ### 🔒 Security Notes
@@ -174,8 +220,33 @@ cpp_standx_client/
 - ✅ Uses EIP-191 personal_sign for SIWE authentication
 - ✅ Ed25519 signatures for API request verification
 - ✅ Independent Ed25519 keypair generated per session
+- ✅ Integrated Keccak-256 implementation (no external deps)
 - ⚠️ Keep your private key secure - never expose it in logs
 - ⚠️ Use environment variables for sensitive data
+
+### 🎮 Grid Strategy
+
+The project includes a grid trading strategy implementation:
+
+- **Long Grid**: Places buy orders below current price, sells above
+- **Short Grid**: Places sell orders above current price, covers below
+- **TP Management**: Automatic take-profit orders for filled positions
+- **Position Monitoring**: Real-time position and order tracking
+- **Multi-Symbol**: Supports BTC, ETH, SOL with custom parameters
+
+Configure in `data.h` via `Config` struct:
+```cpp
+struct Config {
+    float lever;                // Leverage
+    float minAvailBal;         // Minimum available balance
+    bool gridLong;             // Enable long grid
+    bool gridShort;            // Enable short grid
+    float subBtcSize;          // BTC order size
+    float subEthSize;          // ETH order size
+    float subSolSize;          // SOL order size
+    // ... other fields
+};
+```
 
 ### 🤝 Contributing
 
@@ -195,7 +266,7 @@ MIT License - See LICENSE file for details
 
 ### 📖 这是什么？
 
-一个**生产可用**的 C++ 版 [StandX](https://standx.com) 永续合约交易客户端！💪 从身份验证到订单管理，支持**自动刷新 Token** 和**请求体签名验证**。
+一个支持网格策略的 C++ 版 [StandX](https://standx.com) 永续合约交易客户端！💪 从身份验证到订单管理，并实现了自动化网格交易策略。
 
 ### ✨ 功能特性
 
@@ -205,21 +276,29 @@ MIT License - See LICENSE file for details
 - 401 错误自动刷新 Token
 
 📊 **行情数据**
-- 实时行情查询（无需认证）
-- 账户余额查询
-- 持仓监控
+- 实时行情查询
+- 账户余额查询（全仓模式）
+- 持仓监控（自动识别方向）
 
 📈 **订单管理**
-- 创建订单（市价、限价等）
-- 按 ID 或自定义 ID 取消订单
-- 查询订单状态
+- 下单（自动转换方向/类型为小写）
+- 止盈单（根据方向自动处理数量正负）
+- 按 ID 取消订单
+- 查询订单详情（状态映射）
 - 查询未成交订单
 
+⚡ **网格交易策略**
+- 多空网格策略
+- 自动仓位管理
+- 止盈单管理
+- 可配置网格大小和间隔
+- 多币种支持（BTC、ETH、SOL）
+
 🛠️ **开发者友好**
-- 模块化架构（加密、HTTP、认证、客户端）
-- CURL 连接复用优化
-- 详细的调试日志
-- 简洁的 C++17 代码
+- 模块化架构，清晰分离
+- 自定义日志系统（tracer 宏）
+- 安全的浮点/字符串转换工具
+- 现代 C++17 代码
 
 ### 🔧 依赖项
 
@@ -227,6 +306,7 @@ MIT License - See LICENSE file for details
 - **libsodium** - Ed25519 签名
 - **libsecp256k1** - 以太坊密钥操作
 - **libcurl** - HTTP 请求
+- **Poco** - 线程、时间、日志
 - **nlohmann/json** - JSON 解析（仅头文件）
 
 #### 📦 安装依赖 (Ubuntu/Debian)

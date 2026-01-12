@@ -1,237 +1,458 @@
 #include "standx_client.h"
-#include "http_client.h"
-#include "auth.h"
-#include <nlohmann/json.hpp>
-#include <stdexcept>
-#include <iostream>
+
+#include <algorithm>
 #include <chrono>
-#include <sstream>
 #include <iomanip>
+#include <nlohmann/json.hpp>
 #include <random>
+#include <sstream>
+#include <stdexcept>
+
+#include "auth.h"
+#include "http_client.h"
+#include "tracer.h"
+#include "util.h"
 
 namespace standx {
 
-StandXClient::StandXClient(const std::string& chain, const std::string& private_key_hex)
-    : chain_(chain), api_base_url_("https://perps.standx.com") {
-    http_ = std::make_unique<HttpClient>();
-    auth_ = std::make_unique<AuthManager>(chain);
-    auth_->set_private_key(private_key_hex);
+static std::string mapOrderStatus(const std::string& api_status) {
+  if (api_status == "open") return "NEW";
+  if (api_status == "canceled") return "CANCELED";
+  if (api_status == "filled") return "FILLED";
+  if (api_status == "rejected") return "FAILED";
+  return "UNKNOWN";
+}
 
-    // Set token refresh callback for automatic retry on 401
-    http_->set_token_refresh_callback([this]() {
-        access_token_ = auth_->login();
-        return access_token_;
-    });
+StandXClient::StandXClient(const std::string& chain,
+                           const std::string& private_key_hex,
+                           const std::string& symbol)
+    : chain_(chain),
+      symbol_(symbol),
+      api_base_url_("https://perps.standx.com") {
+  http_ = std::make_unique<HttpClient>();
+  auth_ = std::make_unique<AuthManager>(chain);
+  auth_->set_private_key(private_key_hex);
+
+  http_->set_token_refresh_callback([this]() {
+    access_token_ = auth_->login();
+    return access_token_;
+  });
 }
 
 StandXClient::~StandXClient() = default;
 
-std::string StandXClient::get_address() const {
-    return auth_->get_address();
-}
+std::string StandXClient::get_address() const { return auth_->get_address(); }
 
 std::string StandXClient::login() {
-    access_token_ = auth_->login();
-    return access_token_;
+  access_token_ = auth_->login();
+  return access_token_;
 }
 
 std::string StandXClient::request_with_retry(const std::string& url) {
-    // Token refresh is now handled automatically in HttpClient
-    return http_->get_with_auth(url, access_token_);
+  return http_->get_with_auth(url, access_token_);
 }
 
-std::string StandXClient::query_balance() {
-    if (access_token_.empty()) {
-        throw std::runtime_error("not logged in, call login() first");
+bool StandXClient::balance(float& availBal, float& totalBal) {
+  if (access_token_.empty()) {
+    throw std::runtime_error("not logged in, call login() first");
+  }
+
+  std::string url = api_base_url_ + "/api/query_balance";
+
+  try {
+    std::string response = request_with_retry(url);
+    auto json = nlohmann::json::parse(response);
+
+    if (json.contains("cross_available") &&
+        json["cross_available"].is_string()) {
+      availBal = safeStof(json["cross_available"].get<std::string>());
+    }
+    if (json.contains("cross_balance") && json["cross_balance"].is_string()) {
+      totalBal = safeStof(json["cross_balance"].get<std::string>());
     }
 
-    std::string url = api_base_url_ + "/api/query_balance";
-    return request_with_retry(url);
+    return true;
+  } catch (const std::exception& e) {
+    ERROR("Failed to query balance: " << e.what());
+    return false;
+  }
 }
 
-std::string StandXClient::query_positions(const std::string& symbol) {
-    if (access_token_.empty()) {
-        throw std::runtime_error("not logged in, call login() first");
+bool StandXClient::positions(std::vector<Position>& positions_list) {
+  if (access_token_.empty()) {
+    throw std::runtime_error("not logged in, call login() first");
+  }
+
+  std::string url = api_base_url_ + "/api/query_positions";
+  if (!symbol_.empty()) {
+    url += "?symbol=" + symbol_;
+  }
+
+  try {
+    std::string response = request_with_retry(url);
+    auto json = nlohmann::json::parse(response);
+
+    positions_list.clear();
+
+    if (json.is_array()) {
+      for (const auto& item : json) {
+        Position pos;
+
+        float qty = 0.0f;
+        if (item.contains("qty") && item["qty"].is_string()) {
+          qty = safeStof(item["qty"].get<std::string>());
+        }
+
+        if (qty < 0) {
+          pos.positionSide = "SHORT";
+          pos.positionAmt = -qty;
+        } else {
+          pos.positionSide = "LONG";
+          pos.positionAmt = qty;
+        }
+
+        positions_list.push_back(pos);
+      }
     }
 
-    std::string url = api_base_url_ + "/api/query_positions";
-    if (!symbol.empty()) {
-        url += "?symbol=" + symbol;
-    }
-    return request_with_retry(url);
+    return true;
+  } catch (const std::exception& e) {
+    ERROR("Error parsing positions response: " << e.what());
+    return false;
+  }
 }
 
-std::string StandXClient::query_order(int order_id, const std::string& cl_ord_id) {
-    if (access_token_.empty()) {
-        throw std::runtime_error("not logged in, call login() first");
+bool StandXClient::detail(Order& order) {
+  if (order.id.empty()) {
+    ERROR("Order ID is empty");
+    order.status = "FAILED";
+    return true;
+  }
+  if (access_token_.empty()) {
+    throw std::runtime_error("not logged in, call login() first");
+  }
+
+  if (order.id.empty()) {
+    ERROR("Order id is required for detail query");
+    return false;
+  }
+
+  std::string url = api_base_url_ + "/api/query_order?order_id=" + order.id;
+
+  try {
+    std::string response = request_with_retry(url);
+    auto json = nlohmann::json::parse(response);
+
+    if (json.contains("status") && json["status"].is_string()) {
+      order.status = mapOrderStatus(json["status"].get<std::string>());
     }
 
-    if (order_id < 0 && cl_ord_id.empty()) {
-        throw std::runtime_error("at least one of order_id or cl_ord_id is required");
-    }
-
-    std::string url = api_base_url_ + "/api/query_order?";
-    if (order_id >= 0) {
-        url += "order_id=" + std::to_string(order_id);
-    }
-    if (!cl_ord_id.empty()) {
-        if (order_id >= 0) url += "&";
-        url += "cl_ord_id=" + cl_ord_id;
-    }
-
-    return request_with_retry(url);
+    return true;
+  } catch (const std::exception& e) {
+    ERROR("Error parsing order detail response: " << e.what());
+    return false;
+  }
 }
 
-std::string StandXClient::query_open_orders(const std::string& symbol) {
-    if (access_token_.empty()) {
-        throw std::runtime_error("not logged in, call login() first");
+bool StandXClient::unfilledOrders(std::list<Order>& order_list) {
+  if (access_token_.empty()) {
+    throw std::runtime_error("not logged in, call login() first");
+  }
+
+  std::string url = api_base_url_ + "/api/query_open_orders";
+  if (!symbol_.empty()) {
+    url += "?symbol=" + symbol_;
+  }
+
+  try {
+    std::string response = request_with_retry(url);
+    auto json = nlohmann::json::parse(response);
+
+    order_list.clear();
+
+    if (json.is_array()) {
+      for (const auto& item : json) {
+        Order order;
+
+        if (item.contains("id") && item["id"].is_number()) {
+          order.id = std::to_string(item["id"].get<long long>());
+        }
+
+        if (item.contains("symbol") && item["symbol"].is_string()) {
+          order.contract = item["symbol"].get<std::string>();
+        }
+
+        if (item.contains("qty") && item["qty"].is_string()) {
+          order.size = safeStof(item["qty"].get<std::string>());
+        }
+
+        if (item.contains("price") && item["price"].is_string()) {
+          order.price = safeStof(item["price"].get<std::string>());
+        }
+
+        if (item.contains("reduce_only") && item["reduce_only"].is_boolean()) {
+          order.is_reduce_only = item["reduce_only"].get<bool>();
+        }
+
+        if (item.contains("status") && item["status"].is_string()) {
+          order.status = mapOrderStatus(item["status"].get<std::string>());
+        }
+
+        order_list.push_back(order);
+      }
     }
 
-    std::string url = api_base_url_ + "/api/query_open_orders";
-    if (!symbol.empty()) {
-        url += "?symbol=" + symbol;
-    }
-    return request_with_retry(url);
+    return true;
+  } catch (const std::exception& e) {
+    ERROR("Error parsing unfilled orders response: " << e.what());
+    return false;
+  }
 }
 
-std::string StandXClient::query_symbol_price(const std::string& symbol) {
-    if (symbol.empty()) {
-        throw std::runtime_error("symbol is required for query_symbol_price");
+bool StandXClient::tickers(Ticker& tk) {
+  std::string url = api_base_url_ + "/api/query_symbol_price?symbol=" + symbol_;
+
+  try {
+    std::string response = http_->get(url);
+    auto json = nlohmann::json::parse(response);
+
+    if (json.contains("price") && json["price"].is_string()) {
+      tk.last = safeStof(json["price"]);
+      return true;
     }
 
-    std::string url = api_base_url_ + "/api/query_symbol_price?symbol=" + symbol;
-    return http_->get(url);
+    ERROR("Price field not found in response");
+    return false;
+  } catch (const std::exception& e) {
+    ERROR("Failed to query ticker: " << e.what());
+    return false;
+  }
 }
 
-std::string StandXClient::new_order(const std::string& symbol, const std::string& side,
-                                     const std::string& order_type, const std::string& qty,
-                                     const std::string& time_in_force, bool reduce_only,
-                                     const std::string& price) {
-    if (access_token_.empty()) {
-        throw std::runtime_error("not logged in, call login() first");
+bool StandXClient::placeOrder(Order& order) {
+  if (access_token_.empty()) {
+    throw std::runtime_error("not logged in, call login() first");
+  }
+
+  nlohmann::json order_json;
+  order_json["symbol"] = symbol_;
+
+  std::string side = order.side;
+  std::transform(side.begin(), side.end(), side.begin(), ::tolower);
+  order_json["side"] = side;
+
+  std::string type = order.type;
+  std::transform(type.begin(), type.end(), type.begin(), ::tolower);
+  order_json["order_type"] = type;
+  order_json["qty"] = std::to_string(order.size);
+  order_json["time_in_force"] = "alo";
+  order_json["reduce_only"] = order.is_reduce_only;
+  order_json["price"] = safeFtos(order.price, PRICE_ACCURACY_INT);
+
+  std::string url = api_base_url_ + "/api/new_order";
+  std::string body = order_json.dump();
+
+  std::random_device rd;
+  std::mt19937_64 gen(rd());
+  std::uniform_int_distribution<uint64_t> dis;
+
+  std::stringstream ss;
+  ss << std::hex << std::setfill('0') << std::setw(8) << (dis(gen) & 0xFFFFFFFF)
+     << "-" << std::setw(4) << (dis(gen) & 0xFFFF) << "-" << std::setw(4)
+     << ((dis(gen) & 0x0FFF) | 0x4000) << "-" << std::setw(4)
+     << ((dis(gen) & 0x3FFF) | 0x8000) << "-" << std::setw(12)
+     << (dis(gen) & 0xFFFFFFFFFFFF);
+  std::string request_id = ss.str();
+
+  auto now = std::chrono::system_clock::now();
+  auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                now.time_since_epoch())
+                .count();
+  std::string timestamp = std::to_string(ms);
+
+  std::string version = "v1";
+  std::string message =
+      version + "," + request_id + "," + timestamp + "," + body;
+
+  std::string signature = auth_->sign_ed25519_base64(message);
+
+  DEBUG("=== Order Signing Debug ===")
+  DEBUG("Body: " << body);
+  DEBUG("Request ID: " << request_id);
+  DEBUG("Timestamp: " << timestamp);
+  DEBUG("Message to sign: " << message);
+  DEBUG("Signature (Ed25519 base64): " << signature << " (len="
+                                       << signature.length() << ")");
+  DEBUG("===========================")
+
+  std::map<std::string, std::string> extra_headers;
+  extra_headers["x-request-sign-version"] = version;
+  extra_headers["x-request-id"] = request_id;
+  extra_headers["x-request-timestamp"] = timestamp;
+  extra_headers["x-request-signature"] = signature;
+
+  try {
+    std::string response =
+        http_->post_json_with_auth(url, body, access_token_, extra_headers);
+
+    auto json_response = nlohmann::json::parse(response);
+    if (json_response.contains("id") && json_response["id"].is_number()) {
+      order.id = std::to_string(json_response["id"].get<long long>());
+    }
+    if (json_response.contains("status") &&
+        json_response["status"].is_string()) {
+      order.status = mapOrderStatus(json_response["status"].get<std::string>());
     }
 
-    if (symbol.empty() || side.empty() || order_type.empty() || qty.empty() || time_in_force.empty()) {
-        throw std::runtime_error("symbol, side, order_type, qty, and time_in_force are required");
-    }
-
-    nlohmann::json order;
-    order["symbol"] = symbol;
-    order["side"] = side;
-    order["order_type"] = order_type;
-    order["qty"] = qty;
-    order["time_in_force"] = time_in_force;
-    order["reduce_only"] = reduce_only;
-    if (!price.empty()) {
-        order["price"] = price;
-    }
-
-    std::string url = api_base_url_ + "/api/new_order";
-    std::string body = order.dump();
-
-    // Body Signature Flow
-    // 1. Generate UUID for request_id
-    std::random_device rd;
-    std::mt19937_64 gen(rd());
-    std::uniform_int_distribution<uint64_t> dis;
-
-    std::stringstream ss;
-    ss << std::hex << std::setfill('0')
-       << std::setw(8) << (dis(gen) & 0xFFFFFFFF) << "-"
-       << std::setw(4) << (dis(gen) & 0xFFFF) << "-"
-       << std::setw(4) << ((dis(gen) & 0x0FFF) | 0x4000) << "-"
-       << std::setw(4) << ((dis(gen) & 0x3FFF) | 0x8000) << "-"
-       << std::setw(12) << (dis(gen) & 0xFFFFFFFFFFFF);
-    std::string request_id = ss.str();
-
-    // 2. Get current timestamp (milliseconds)
-    auto now = std::chrono::system_clock::now();
-    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
-    std::string timestamp = std::to_string(ms);
-
-    // 3. Build message: {version},{id},{timestamp},{payload}
-    std::string version = "v1";
-    std::string message = version + "," + request_id + "," + timestamp + "," + body;
-
-    // 4. Sign using Ed25519 (matches official TypeScript implementation)
-    std::string signature = auth_->sign_ed25519_base64(message);
-
-    std::cout << "\n=== Order Signing Debug ===";
-    std::cout << "\nBody: " << body;
-    std::cout << "\nRequest ID: " << request_id;
-    std::cout << "\nTimestamp: " << timestamp;
-    std::cout << "\nMessage to sign: " << message;
-    std::cout << "\nSignature (Ed25519 base64): " << signature << " (len=" << signature.length() << ")";
-    std::cout << "\n===========================\n";
-
-    // 5. Attach signature to request headers
-    std::map<std::string, std::string> extra_headers;
-    extra_headers["x-request-sign-version"] = version;
-    extra_headers["x-request-id"] = request_id;
-    extra_headers["x-request-timestamp"] = timestamp;
-    extra_headers["x-request-signature"] = signature;
-
-    // Token refresh is now handled automatically in HttpClient
-    return http_->post_json_with_auth(url, body, access_token_, extra_headers);
+    DEBUG("Order placed successfully: " << order.id);
+    return true;
+  } catch (const std::exception& e) {
+    ERROR("Failed to place order: " << e.what());
+    return false;
+  }
 }
 
-std::string StandXClient::cancel_order(int order_id, const std::string& cl_ord_id) {
-    if (access_token_.empty()) {
-        throw std::runtime_error("not logged in, call login() first");
+bool StandXClient::tpOrder(Order& order) {
+  if (access_token_.empty()) {
+    throw std::runtime_error("not logged in, call login() first");
+  }
+
+  nlohmann::json order_json;
+  order_json["symbol"] = symbol_;
+
+  std::string side = order.side;
+  std::transform(side.begin(), side.end(), side.begin(), ::tolower);
+  order_json["side"] = side;
+
+  std::string type = order.type;
+  std::transform(type.begin(), type.end(), type.begin(), ::tolower);
+  order_json["order_type"] = type;
+
+  float qty = order.size;
+  if (order.side == "SELL") {
+    qty = -qty;
+  }
+  order_json["qty"] = std::to_string(qty);
+
+  order_json["time_in_force"] = "alo";
+  order_json["reduce_only"] = true;
+  order_json["price"] = safeFtos(order.price, PRICE_ACCURACY_INT);
+
+  std::string url = api_base_url_ + "/api/new_order";
+  std::string body = order_json.dump();
+
+  std::random_device rd;
+  std::mt19937_64 gen(rd());
+  std::uniform_int_distribution<uint64_t> dis;
+
+  std::stringstream ss;
+  ss << std::hex << std::setfill('0') << std::setw(8) << (dis(gen) & 0xFFFFFFFF)
+     << "-" << std::setw(4) << (dis(gen) & 0xFFFF) << "-" << std::setw(4)
+     << ((dis(gen) & 0x0FFF) | 0x4000) << "-" << std::setw(4)
+     << ((dis(gen) & 0x3FFF) | 0x8000) << "-" << std::setw(12)
+     << (dis(gen) & 0xFFFFFFFFFFFF);
+  std::string request_id = ss.str();
+
+  auto now = std::chrono::system_clock::now();
+  auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                now.time_since_epoch())
+                .count();
+  std::string timestamp = std::to_string(ms);
+
+  std::string version = "v1";
+  std::string message =
+      version + "," + request_id + "," + timestamp + "," + body;
+
+  std::string signature = auth_->sign_ed25519_base64(message);
+
+  DEBUG("=== TP Order Signing Debug ===")
+  DEBUG("Body: " << body);
+  DEBUG("Request ID: " << request_id);
+  DEBUG("Timestamp: " << timestamp);
+  DEBUG("Message to sign: " << message);
+  DEBUG("Signature (Ed25519 base64): " << signature << " (len="
+                                       << signature.length() << ")");
+  DEBUG("===========================")
+
+  std::map<std::string, std::string> extra_headers;
+  extra_headers["x-request-sign-version"] = version;
+  extra_headers["x-request-id"] = request_id;
+  extra_headers["x-request-timestamp"] = timestamp;
+  extra_headers["x-request-signature"] = signature;
+
+  try {
+    std::string response =
+        http_->post_json_with_auth(url, body, access_token_, extra_headers);
+
+    auto json_response = nlohmann::json::parse(response);
+    if (json_response.contains("id") && json_response["id"].is_number()) {
+      order.id = std::to_string(json_response["id"].get<long long>());
+    }
+    if (json_response.contains("status") &&
+        json_response["status"].is_string()) {
+      order.status = mapOrderStatus(json_response["status"].get<std::string>());
     }
 
-    if (order_id < 0 && cl_ord_id.empty()) {
-        throw std::runtime_error("at least one of order_id or cl_ord_id is required");
-    }
-
-    // Build request body
-    nlohmann::json cancel_req;
-    if (order_id >= 0) {
-        cancel_req["order_id"] = order_id;
-    }
-    if (!cl_ord_id.empty()) {
-        cancel_req["cl_ord_id"] = cl_ord_id;
-    }
-
-    std::string url = api_base_url_ + "/api/cancel_order";
-    std::string body = cancel_req.dump();
-
-    // Body Signature Flow
-    // 1. Generate UUID for request_id
-    std::random_device rd;
-    std::mt19937_64 gen(rd());
-    std::uniform_int_distribution<uint64_t> dis;
-
-    std::stringstream ss;
-    ss << std::hex << std::setfill('0')
-       << std::setw(8) << (dis(gen) & 0xFFFFFFFF) << "-"
-       << std::setw(4) << (dis(gen) & 0xFFFF) << "-"
-       << std::setw(4) << ((dis(gen) & 0x0FFF) | 0x4000) << "-"
-       << std::setw(4) << ((dis(gen) & 0x3FFF) | 0x8000) << "-"
-       << std::setw(12) << (dis(gen) & 0xFFFFFFFFFFFF);
-    std::string request_id = ss.str();
-
-    // 2. Get current timestamp (milliseconds)
-    auto now = std::chrono::system_clock::now();
-    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
-    std::string timestamp = std::to_string(ms);
-
-    // 3. Build message: {version},{id},{timestamp},{payload}
-    std::string version = "v1";
-    std::string message = version + "," + request_id + "," + timestamp + "," + body;
-
-    // 4. Sign using Ed25519
-    std::string signature = auth_->sign_ed25519_base64(message);
-
-    // 5. Attach signature to request headers
-    std::map<std::string, std::string> extra_headers;
-    extra_headers["x-request-sign-version"] = version;
-    extra_headers["x-request-id"] = request_id;
-    extra_headers["x-request-timestamp"] = timestamp;
-    extra_headers["x-request-signature"] = signature;
-
-    // Token refresh is now handled automatically in HttpClient
-    return http_->post_json_with_auth(url, body, access_token_, extra_headers);
+    DEBUG("TP order placed successfully: " << order.id);
+    return true;
+  } catch (const std::exception& e) {
+    ERROR("Failed to place TP order: " << e.what());
+    return false;
+  }
 }
 
-} // namespace standx
+void StandXClient::cancelOrder(const std::string& id) {
+  if (access_token_.empty()) {
+    throw std::runtime_error("not logged in, call login() first");
+  }
+
+  if (id.empty()) {
+    ERROR("Order id is required for cancel");
+    return;
+  }
+
+  nlohmann::json cancel_req;
+  cancel_req["order_id"] = id;
+
+  std::string url = api_base_url_ + "/api/cancel_order";
+  std::string body = cancel_req.dump();
+
+  std::random_device rd;
+  std::mt19937_64 gen(rd());
+  std::uniform_int_distribution<uint64_t> dis;
+
+  std::stringstream ss;
+  ss << std::hex << std::setfill('0') << std::setw(8) << (dis(gen) & 0xFFFFFFFF)
+     << "-" << std::setw(4) << (dis(gen) & 0xFFFF) << "-" << std::setw(4)
+     << ((dis(gen) & 0x0FFF) | 0x4000) << "-" << std::setw(4)
+     << ((dis(gen) & 0x3FFF) | 0x8000) << "-" << std::setw(12)
+     << (dis(gen) & 0xFFFFFFFFFFFF);
+  std::string request_id = ss.str();
+
+  auto now = std::chrono::system_clock::now();
+  auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                now.time_since_epoch())
+                .count();
+  std::string timestamp = std::to_string(ms);
+
+  std::string version = "v1";
+  std::string message =
+      version + "," + request_id + "," + timestamp + "," + body;
+
+  std::string signature = auth_->sign_ed25519_base64(message);
+
+  std::map<std::string, std::string> extra_headers;
+  extra_headers["x-request-sign-version"] = version;
+  extra_headers["x-request-id"] = request_id;
+  extra_headers["x-request-timestamp"] = timestamp;
+  extra_headers["x-request-signature"] = signature;
+
+  try {
+    http_->post_json_with_auth(url, body, access_token_, extra_headers);
+    DEBUG("Order canceled successfully: " << id);
+  } catch (const std::exception& e) {
+    ERROR("Failed to cancel order " << id << ": " << e.what());
+  }
+}
+
+}  // namespace standx

@@ -1,0 +1,10 @@
+#ifndef _DEFINES_H
+#define _DEFINES_H
+
+#define DEFAULT_CONTRACT_SIZE 0.01
+#define ORDER_NUM 10
+#define MAX_ORDER_NUM_FACTOR 1.5
+#define PRICE_ACCURACY_INT 2
+#define PRICE_ACCURACY_FLOAT 0.01
+
+#endif

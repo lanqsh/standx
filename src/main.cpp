@@ -1,111 +1,114 @@
-#include "standx_client.h"
-#include <iostream>
 #include <fstream>
 #include <map>
 
-// Load .env file
+#include "data.h"
+#include "standx_client.h"
+#include "tracer.h"
+
+Config kConfig;
+
 std::map<std::string, std::string> load_env(const std::string& path = ".env") {
-    std::map<std::string, std::string> env;
-    std::ifstream ifs(path);
-    if (!ifs.is_open()) return env;
+  std::map<std::string, std::string> env;
+  std::ifstream ifs(path);
+  if (!ifs.is_open()) return env;
 
-    std::string line;
-    while (std::getline(ifs, line)) {
-        // Trim and skip comments
-        size_t start = line.find_first_not_of(" \t\r\n");
-        if (start == std::string::npos || line[start] == '#') continue;
+  std::string line;
+  while (std::getline(ifs, line)) {
+    size_t start = line.find_first_not_of(" \t\r\n");
+    if (start == std::string::npos || line[start] == '#') continue;
 
-        size_t eq = line.find('=');
-        if (eq == std::string::npos) continue;
+    size_t eq = line.find('=');
+    if (eq == std::string::npos) continue;
 
-        std::string key = line.substr(0, eq);
-        std::string val = line.substr(eq + 1);
+    std::string key = line.substr(0, eq);
+    std::string val = line.substr(eq + 1);
 
-        // Trim
-        key.erase(0, key.find_first_not_of(" \t"));
-        key.erase(key.find_last_not_of(" \t") + 1);
-        val.erase(0, val.find_first_not_of(" \t"));
-        val.erase(val.find_last_not_of(" \t") + 1);
+    key.erase(0, key.find_first_not_of(" \t"));
+    key.erase(key.find_last_not_of(" \t") + 1);
+    val.erase(0, val.find_first_not_of(" \t"));
+    val.erase(val.find_last_not_of(" \t") + 1);
 
-        // Remove quotes
-        if (val.size() >= 2 && ((val.front() == '"' && val.back() == '"') ||
-                                 (val.front() == '\'' && val.back() == '\''))) {
-            val = val.substr(1, val.size() - 2);
-        }
-
-        env[key] = val;
+    if (val.size() >= 2 && ((val.front() == '"' && val.back() == '"') ||
+                            (val.front() == '\'' && val.back() == '\''))) {
+      val = val.substr(1, val.size() - 2);
     }
-    return env;
+
+    env[key] = val;
+  }
+  return env;
 }
 
 int main() {
-    try {
-        // Load config
-        auto env = load_env(".env");
-        std::string chain = env["CHAIN"];
-        std::string private_key = env["WALLET_PRIVATE_KEY_HEX"];
+  logger::Tracer::Init();
 
-        if (chain.empty() || private_key.empty()) {
-            std::cerr << "Error: Missing CHAIN or WALLET_PRIVATE_KEY_HEX in .env file\n";
-            return 1;
-        }
+  try {
+    auto env = load_env(".env");
+    std::string chain = env["CHAIN"];
+    std::string private_key = env["WALLET_PRIVATE_KEY_HEX"];
 
-        // Create client
-        standx::StandXClient client(chain, private_key);
-        std::cout << "Address: " << client.get_address() << "\n\n";
-
-        // Query symbol price (no auth required)
-        std::cout << "Querying ETH-USD price...\n";
-        std::string price = client.query_symbol_price("ETH-USD");
-        std::cout << "Symbol Price:\n" << price << "\n\n";
-
-        // Login
-        std::cout << "Logging in...\n";
-        std::string token = client.login();
-        std::cout << "Access token: " << token << "\n\n";
-
-        // Query balance
-        std::cout << "Querying balance...\n";
-        std::string balance = client.query_balance();
-        std::cout << "Balance:\n" << balance << "\n\n";
-
-        // Query order
-        std::cout << "Querying order 784080731...\n";
-        std::string order = client.query_order(784080731);
-        std::cout << "Order:\n" << order << "\n\n";
-
-        // Query open orders
-        std::cout << "Querying open orders...\n";
-        std::string open_orders = client.query_open_orders();
-        std::cout << "Open Orders:\n" << open_orders << "\n\n";
-
-        // Query positions
-        std::cout << "Querying positions for ETH-USD...\n";
-        std::string positions = client.query_positions("ETH-USD");
-        std::cout << "Positions:\n" << positions << "\n\n";
-
-        // Create new order
-        // std::cout << "Creating new order: ETH-USD limit buy @ 3000, qty=0.001...\n";
-        // std::string new_order_result = client.new_order(
-        //     "ETH-USD",      // symbol
-        //     "buy",          // side (多单)
-        //     "limit",        // order_type
-        //     "0.001",        // qty
-        //     "alo",          // time_in_force
-        //     false,          // reduce_only
-        //     "3000"          // price
-        // );
-        // std::cout << "New Order Result:\n" << new_order_result << "\n\n";
-
-        // Cancel order
-        std::cout << "Canceling order 792209018...\n";
-        std::string cancel_result = client.cancel_order(792209018);
-        std::cout << "Cancel Order Result:\n" << cancel_result << "\n\n";
-
-    } catch (const std::exception& e) {
-        std::cerr << "Error: " << e.what() << "\n";
-        return 1;
+    if (chain.empty() || private_key.empty()) {
+      ERROR("Missing CHAIN or WALLET_PRIVATE_KEY_HEX in .env file");
+      return 1;
     }
 
-    return 0;
+    standx::StandXClient client(chain, private_key, "ETH-USD");
+    INFO("Address: " << client.get_address());
+
+    INFO("Querying ETH-USD price...");
+    Ticker ticker;
+    ticker.contract = "ETH-USD";
+    if (client.tickers(ticker)) {
+      INFO("Symbol price: " << ticker.last);
+    }
+
+    INFO("Logging in...");
+    std::string token = client.login();
+    INFO("Access token: " << token);
+
+    INFO("Querying balance...");
+    float availBal = 0.0f, totalBal = 0.0f;
+    if (client.balance(availBal, totalBal)) {
+      INFO("Balance - Available: " << availBal << ", Total: " << totalBal);
+    }
+
+    INFO("Querying order 784080731...");
+    Order test_order;
+    test_order.id = "784080731";
+    if (client.detail(test_order)) {
+        INFO("Order Detail: ID=" << test_order.id << ", Status=" << test_order.status
+                  << ", Price=" << test_order.price << ", Size=" << test_order.size);
+    } else {
+        ERROR("Failed to query order detail");
+    }
+
+    INFO("Querying open orders...");
+    std::list<Order> unfilled_orders;
+    if (client.unfilledOrders(unfilled_orders)) {
+        INFO("Unfilled Orders (" << unfilled_orders.size() << " found)");
+        for (const auto& order : unfilled_orders) {
+            INFO("  - ID: " << order.id << ", Side: " << order.side
+                      << ", Price: " << order.price << ", Size: " << order.size);
+        }
+    } else {
+        ERROR("Failed to query unfilled orders");
+    }
+
+    INFO("Querying positions for ETH-USD...");
+    std::vector<Position> positions_list;
+    if (client.positions(positions_list)) {
+      INFO("Positions (" << positions_list.size() << " found)");
+      for (const auto& pos : positions_list) {
+        INFO("  - Side: " << pos.positionSide
+                          << ", Amount: " << pos.positionAmt);
+      }
+    } else {
+      ERROR("Failed to query positions");
+    }
+
+  } catch (const std::exception& e) {
+    ERROR("Exception: " << e.what());
+    return 1;
+  }
+
+  return 0;
 }
