@@ -55,6 +55,8 @@ class Strategy : public Poco::Runnable {
   void IncreaseLongPosition();
   void IncreaseShortPosition();
   void ResetDailyCounters();
+  void SyncPlacedOrderWithUnfilled(Order &order);
+  void SyncTpOrderWithUnfilled(Order &order);
 
  private:
   bool thread_running_{false};
