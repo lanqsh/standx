@@ -148,6 +148,9 @@ std::string convertRemark(const std::string& remark) {
 }
 
 void sendMessage(const std::string& message, bool force) {
+  if (kConfig.barkServer.empty()) {
+    return;
+  }
   std::string endpoint = "curl -s -o /dev/null " + kConfig.barkServer;
   std::string ring = "?level=critical&volume=1";
 

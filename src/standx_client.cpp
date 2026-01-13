@@ -32,6 +32,7 @@ StandXClient::StandXClient(const std::string& chain,
   http_ = std::make_unique<HttpClient>();
   auth_ = std::make_unique<AuthManager>(chain);
   auth_->set_private_key(private_key_hex);
+  access_token_ = auth_->login();
 
   http_->set_token_refresh_callback([this]() {
     access_token_ = auth_->login();
@@ -170,16 +171,18 @@ bool StandXClient::unfilledOrders(std::list<Order>& order_list) {
 
     order_list.clear();
 
-    if (json.is_array()) {
-      for (const auto& item : json) {
+    if (json.contains("result") && json["result"].is_array()) {
+      for (const auto& item : json["result"]) {
         Order order;
 
         if (item.contains("id") && item["id"].is_number()) {
           order.id = std::to_string(item["id"].get<long long>());
         }
 
-        if (item.contains("symbol") && item["symbol"].is_string()) {
-          order.contract = item["symbol"].get<std::string>();
+        if (item.contains("side") && item["side"].is_string()) {
+          std::string side = item["side"].get<std::string>();
+          std::transform(side.begin(), side.end(), side.begin(), ::toupper);
+          order.side = side;
         }
 
         if (item.contains("qty") && item["qty"].is_string()) {
@@ -196,6 +199,20 @@ bool StandXClient::unfilledOrders(std::list<Order>& order_list) {
 
         if (item.contains("status") && item["status"].is_string()) {
           order.status = mapOrderStatus(item["status"].get<std::string>());
+        }
+
+        if (order.is_reduce_only) {
+          if (order.side == "SELL") {
+            order.positionSide = "LONG";
+          } else if (order.side == "BUY") {
+            order.positionSide = "SHORT";
+          }
+        } else {
+          if (order.side == "BUY") {
+            order.positionSide = "LONG";
+          } else if (order.side == "SELL") {
+            order.positionSide = "SHORT";
+          }
         }
 
         order_list.push_back(order);
@@ -216,8 +233,8 @@ bool StandXClient::tickers(Ticker& tk) {
     std::string response = http_->get(url);
     auto json = nlohmann::json::parse(response);
 
-    if (json.contains("price") && json["price"].is_string()) {
-      tk.last = safeStof(json["price"]);
+    if (json.contains("last_price") && json["last_price"].is_string()) {
+      tk.last = safeStof(json["last_price"]);
       return true;
     }
 
@@ -245,9 +262,14 @@ bool StandXClient::placeOrder(Order& order) {
   std::transform(type.begin(), type.end(), type.begin(), ::tolower);
   order_json["order_type"] = type;
   order_json["qty"] = std::to_string(order.size);
-  order_json["time_in_force"] = "alo";
   order_json["reduce_only"] = order.is_reduce_only;
-  order_json["price"] = safeFtos(order.price, PRICE_ACCURACY_INT);
+
+  if (type == "market") {
+    order_json["time_in_force"] = "ioc";
+  } else {
+    order_json["time_in_force"] = "alo";
+    order_json["price"] = safeFtos(order.price, PRICE_ACCURACY_INT);
+  }
 
   std::string url = api_base_url_ + "/api/new_order";
   std::string body = order_json.dump();
@@ -275,16 +297,6 @@ bool StandXClient::placeOrder(Order& order) {
       version + "," + request_id + "," + timestamp + "," + body;
 
   std::string signature = auth_->sign_ed25519_base64(message);
-
-  DEBUG("=== Order Signing Debug ===")
-  DEBUG("Body: " << body);
-  DEBUG("Request ID: " << request_id);
-  DEBUG("Timestamp: " << timestamp);
-  DEBUG("Message to sign: " << message);
-  DEBUG("Signature (Ed25519 base64): " << signature << " (len="
-                                       << signature.length() << ")");
-  DEBUG("===========================")
-
   std::map<std::string, std::string> extra_headers;
   extra_headers["x-request-sign-version"] = version;
   extra_headers["x-request-id"] = request_id;
@@ -296,20 +308,20 @@ bool StandXClient::placeOrder(Order& order) {
         http_->post_json_with_auth(url, body, access_token_, extra_headers);
 
     auto json_response = nlohmann::json::parse(response);
-    if (json_response.contains("id") && json_response["id"].is_number()) {
-      order.id = std::to_string(json_response["id"].get<long long>());
-    }
-    if (json_response.contains("status") &&
-        json_response["status"].is_string()) {
-      order.status = mapOrderStatus(json_response["status"].get<std::string>());
-    }
-
-    DEBUG("Order placed successfully: " << order.id);
-    return true;
+        if (json_response.contains("message") &&
+            json_response["message"].is_string()) {
+          std::string msg = json_response["message"].get<std::string>();
+          if (msg == "success") {
+            DEBUG("Order placed ok: " << order.id);
+            return true;
+          } else {
+            DEBUG("Order placement returned message: " << msg);
+          }
+        }
   } catch (const std::exception& e) {
     ERROR("Failed to place order: " << e.what());
-    return false;
   }
+  return false;
 }
 
 bool StandXClient::tpOrder(Order& order) {
@@ -327,16 +339,11 @@ bool StandXClient::tpOrder(Order& order) {
   std::string type = order.type;
   std::transform(type.begin(), type.end(), type.begin(), ::tolower);
   order_json["order_type"] = type;
-
-  float qty = order.size;
-  if (order.side == "SELL") {
-    qty = -qty;
-  }
-  order_json["qty"] = std::to_string(qty);
+  order_json["qty"] = std::to_string(order.size);
 
   order_json["time_in_force"] = "alo";
   order_json["reduce_only"] = true;
-  order_json["price"] = safeFtos(order.price, PRICE_ACCURACY_INT);
+  order_json["price"] = safeFtos(order.tp_price, PRICE_ACCURACY_INT);
 
   std::string url = api_base_url_ + "/api/new_order";
   std::string body = order_json.dump();
@@ -364,16 +371,6 @@ bool StandXClient::tpOrder(Order& order) {
       version + "," + request_id + "," + timestamp + "," + body;
 
   std::string signature = auth_->sign_ed25519_base64(message);
-
-  DEBUG("=== TP Order Signing Debug ===")
-  DEBUG("Body: " << body);
-  DEBUG("Request ID: " << request_id);
-  DEBUG("Timestamp: " << timestamp);
-  DEBUG("Message to sign: " << message);
-  DEBUG("Signature (Ed25519 base64): " << signature << " (len="
-                                       << signature.length() << ")");
-  DEBUG("===========================")
-
   std::map<std::string, std::string> extra_headers;
   extra_headers["x-request-sign-version"] = version;
   extra_headers["x-request-id"] = request_id;
@@ -385,20 +382,20 @@ bool StandXClient::tpOrder(Order& order) {
         http_->post_json_with_auth(url, body, access_token_, extra_headers);
 
     auto json_response = nlohmann::json::parse(response);
-    if (json_response.contains("id") && json_response["id"].is_number()) {
-      order.id = std::to_string(json_response["id"].get<long long>());
-    }
-    if (json_response.contains("status") &&
-        json_response["status"].is_string()) {
-      order.status = mapOrderStatus(json_response["status"].get<std::string>());
-    }
-
-    DEBUG("TP order placed successfully: " << order.id);
-    return true;
+        if (json_response.contains("message") &&
+            json_response["message"].is_string()) {
+          std::string msg = json_response["message"].get<std::string>();
+          if (msg == "success") {
+            DEBUG("TP order placed ok: " << order.id);
+            return true;
+          } else {
+            DEBUG("TP placement returned message: " << msg);
+          }
+        }
   } catch (const std::exception& e) {
     ERROR("Failed to place TP order: " << e.what());
-    return false;
   }
+  return false;
 }
 
 void StandXClient::cancelOrder(const std::string& id) {
@@ -449,7 +446,6 @@ void StandXClient::cancelOrder(const std::string& id) {
 
   try {
     http_->post_json_with_auth(url, body, access_token_, extra_headers);
-    DEBUG("Order canceled successfully: " << id);
   } catch (const std::exception& e) {
     ERROR("Failed to cancel order " << id << ": " << e.what());
   }

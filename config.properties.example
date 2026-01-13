@@ -1,0 +1,20 @@
+uid = main
+secretKey = YOUR_SECRET_KEY_HERE
+chain = bsc
+grid.long = false
+grid.short = true
+
+order.lever = 10
+order.minAvailBal = 20
+order.blackList =
+order.whiteList = ETH-USD
+
+log.logName = log/default.log
+log.logSize = 100M
+log.logLevel = debug
+
+bark.server =
+
+sub.btcSize = 0.0001
+sub.ethSize = 0.001
+sub.solSize = 0.05
