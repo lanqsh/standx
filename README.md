@@ -1,8 +1,6 @@
 # 🚀 StandX C++ Trading Client
 
-> ⚠️ **开发中项目 / Work In Progress**
-> 本项目正在积极开发中，API 接口可能随时变更。生产环境使用前请充分测试。
-> This project is under active development. APIs may change. Test thoroughly before production use.
+> ⚠️ Work In Progress — This project is under active development; APIs may change. Test thoroughly before production use.
 
 [English](#english) | [中文](#chinese)
 
@@ -41,54 +39,83 @@ A **C++ trading client** for [StandX](https://standx.com) perpetual trading with
 - Configurable grid size and intervals
 - Multi-symbol support (BTC, ETH, SOL)
 
-🛠️ **Developer Friendly**
-- Modular architecture with clean separation
-- Custom logging system with tracer macros
-- Safe float/string conversion utilities
-- Modern C++17 codebase
+```cpp
+#include "standx_client.h"
 
-### 🔧 Dependencies
+int main() {
+    // Initialize client: chain, private_key_hex, symbol
+    standx::StandXClient client("bsc", "your_private_key", "ETH-USD");
 
-- **OpenSSL 3.x** - For cryptographic operations
-- **libsodium** - For Ed25519 signatures
-- **libsecp256k1** - For Ethereum key operations
-- **libcurl** - For HTTP requests
-- **Poco** - For threading, datetime, and logging
-- **nlohmann/json** - For JSON parsing (header-only)
+    // Login and get access token
+    std::string token = client.login();
 
-#### 📦 Installation (Ubuntu/Debian)
+    // Query account balance
+    float avail = 0.0f, total = 0.0f;
+    if (client.balance(avail, total)) {
+        // use avail/total
+    }
 
-```bash
-sudo apt update
-sudo apt install -y \
-    build-essential \
-    cmake \
-    libssl-dev \
-    libsodium-dev \
-    libsecp256k1-dev \
-    libcurl4-openssl-dev \
-    libpoco-dev
+    // Query positions
+    std::vector<standx::Position> positions;
+    if (client.positions(positions)) {
+        // iterate positions
+    }
 
-# If you get a compilation error about nlohmann/json, install:
-sudo apt install -y nlohmann-json3-dev
+    // Place a limit order example
+    standx::Order order;
+    order.side = "BUY";
+    order.type = "LIMIT";
+    order.size = 0.01f;
+    order.price = 3000.0f;
+    if (client.placeOrder(order)) {
+        // order.id will be set after sync with unfilled orders
+    }
+
+    // Cancel order
+    client.cancelOrder(order.id);
+
+    return 0;
+}
 ```
 
-#### 🍎 Installation (macOS)
+### 📚 API Reference
 
-```bash
-brew install openssl@3 libsodium secp256k1 curl poco
+#### Authentication
+
+```cpp
+std::string login();                    // Login and get access token
+std::string get_address() const;        // Get wallet address
 ```
 
-### ⚙️ Configuration
+#### Market Data / Account / Positions
 
-Create a `.env` file in the project root:
-
-```bash
-CHAIN=bsc
-WALLET_PRIVATE_KEY_HEX=your_private_key_here_without_0x_prefix
+```cpp
+bool tickers(Ticker& tk);                     // Get latest ticker (returns true/false)
+bool balance(float& availBal, float& totalBal);// Get account balance; writes to reference params
+bool positions(std::vector<Position>& positions_list); // Get positions
 ```
 
-⚠️ **Never commit your `.env` file!** Add it to `.gitignore`.
+#### Order Operations
+
+```cpp
+bool placeOrder(Order& order);                // Place order (LIMIT/MARKET). Order will be updated (id/status)
+bool tpOrder(Order& order);                   // Place TP/reduce-only order. Order.tpId will be set
+void cancelOrder(const std::string& id);      // Cancel order by ID
+bool detail(Order& order);                    // Query order detail and update order.status
+bool unfilledOrders(std::list<Order>& order_list); // Get unfilled orders list
+```
+
+### 🏗️ Architecture
+
+```
+cpp_standx_client/
+├── src/
+- `secretKey`: optional secret for integrations.
+- `chain`: blockchain/network (e.g., `bsc`).
+- `grid.long` / `grid.short`: enable long/short grid strategies.
+- `order.*`: order-related defaults (leverage, min balance).
+- `log.*`: logging configuration.
+- `sub.*Size`: default contract sizes per symbol.
 
 Alternatively, you can configure the client using `config.properties` in the project root. Example `config.properties`:
 
@@ -366,16 +393,42 @@ sudo apt install -y \
 brew install openssl@3 libsodium secp256k1 curl
 ```
 
+
 ### ⚙️ 配置
 
-在项目根目录创建 `.env` 文件：
+请在项目根目录使用 `config.properties` 进行配置（不再使用 `.env`）。示例 `config.properties`：
 
-```bash
-CHAIN=bsc
-WALLET_PRIVATE_KEY_HEX=你的私钥_不带0x前缀
+```properties
+uid = main
+secretKey = YOUR_SECRET_KEY_HERE
+chain = bsc
+grid.long = false
+grid.short = true
+
+order.lever = 10
+order.minAvailBal = 20
+order.blackList =
+order.whiteList = ETH-USD
+
+log.logName = log/default.log
+log.logSize = 100M
+log.logLevel = debug
+
+bark.server =
+
+sub.btcSize = 0.0001
+sub.ethSize = 0.001
+sub.solSize = 0.05
 ```
 
-⚠️ **切勿提交 `.env` 文件！** 请将其加入 `.gitignore`。
+主要字段解释：
+- `uid`：用于通知的用户标识。
+- `secretKey`：可选的集成秘钥。
+- `chain`：链/网络（例如 `bsc`）。
+- `grid.long` / `grid.short`：启用多/空网格策略。
+- `order.*`：下单相关默认值（杠杆，最小余额）。
+- `log.*`：日志配置。
+- `sub.*Size`：各合约的默认下单量。
 
 或者，也可以使用项目根目录下的 `config.properties` 进行配置。示例 `config.properties`：
 
@@ -419,39 +472,6 @@ cmake ..
 cmake --build . --config Release
 ```
 
-### 🎯 快速开始
-
-```cpp
-#include "standx_client.h"
-
-int main() {
-    // 初始化客户端
-    standx::StandXClient client("bsc", "你的私钥");
-
-    // 登录
-    std::string token = client.login();
-
-    // 查询余额
-    std::string balance = client.query_balance();
-
-    // 创建限价单
-    std::string result = client.new_order(
-        "ETH-USD",    // 交易对
-        "buy",        // 方向
-        "limit",      // 订单类型
-        "0.01",       // 数量
-        "gtc",        // 有效期类型
-        false,        // 是否只减仓
-        "3000"        // 价格
-    );
-
-    // 取消订单
-    client.cancel_order(792209018);
-
-    return 0;
-}
-```
-
 ### 📚 API 参考
 
 #### 身份认证
@@ -461,36 +481,22 @@ std::string login();                    // 登录并获取访问令牌
 std::string get_address() const;        // 获取钱包地址
 ```
 
-#### 行情数据
+#### 行情 / 账户 / 持仓
 
 ```cpp
-std::string query_symbol_price(const std::string& symbol);  // 获取行情价格
-std::string query_balance();                                 // 获取账户余额
-std::string query_positions(const std::string& symbol = ""); // 获取持仓
+bool tickers(Ticker& tk);                     // 获取最新行情（返回 true/false）
+bool balance(float& availBal, float& totalBal);// 获取账户余额，结果写入引用参数
+bool positions(std::vector<Position>& positions_list); // 获取持仓
 ```
 
 #### 订单操作
 
 ```cpp
-// 创建订单
-std::string new_order(
-    const std::string& symbol,
-    const std::string& side,           // "buy" 或 "sell"
-    const std::string& order_type,     // "limit", "market" 等
-    const std::string& qty,
-    const std::string& time_in_force,  // "gtc", "ioc", "fok", "alo"
-    bool reduce_only,
-    const std::string& price = ""      // 限价单必填
-);
-
-// 取消订单（提供 order_id 或 cl_ord_id）
-std::string cancel_order(int order_id = -1, const std::string& cl_ord_id = "");
-
-// 查询订单
-std::string query_order(int order_id = -1, const std::string& cl_ord_id = "");
-
-// 查询未成交订单
-std::string query_open_orders(const std::string& symbol = "");
+bool placeOrder(Order& order);                // 下单（limit/market），Order 会被更新（id/status）
+bool tpOrder(Order& order);                   // 下止盈/减仓单（reduce-only），Order.tpId 会被填写
+void cancelOrder(const std::string& id);      // 取消指定 ID 的订单
+bool detail(Order& order);                    // 查询订单详情并更新 order.status
+bool unfilledOrders(std::list<Order>& order_list); // 获取未成交订单列表
 ```
 
 ### 🏗️ 架构设计
@@ -503,7 +509,6 @@ cpp_standx_client/
 │   ├── auth.cpp/h            # 🔑 SIWE认证 & Ed25519签名
 │   ├── standx_client.cpp/h   # 📊 主交易客户端
 │   └── main.cpp              # 🎯 使用示例
-├── deps/                     # 📦 内嵌依赖（tiny_keccak）
 └── CMakeLists.txt           # 🔧 构建配置
 ```
 
