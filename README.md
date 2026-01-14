@@ -68,6 +68,9 @@ sudo apt install -y \
     libsecp256k1-dev \
     libcurl4-openssl-dev \
     libpoco-dev
+
+# If you get a compilation error about nlohmann/json, install:
+sudo apt install -y nlohmann-json3-dev
 ```
 
 #### 🍎 Installation (macOS)
@@ -86,6 +89,40 @@ WALLET_PRIVATE_KEY_HEX=your_private_key_here_without_0x_prefix
 ```
 
 ⚠️ **Never commit your `.env` file!** Add it to `.gitignore`.
+
+Alternatively, you can configure the client using `config.properties` in the project root. Example `config.properties`:
+
+```properties
+uid = main
+secretKey = YOUR_SECRET_KEY_HERE
+chain = bsc
+grid.long = false
+grid.short = true
+
+order.lever = 10
+order.minAvailBal = 20
+order.blackList =
+order.whiteList = ETH-USD
+
+log.logName = log/default.log
+log.logSize = 100M
+log.logLevel = debug
+
+bark.server =
+
+sub.btcSize = 0.0001
+sub.ethSize = 0.001
+sub.solSize = 0.05
+```
+
+Key fields:
+- `uid`: user identifier used for notifications.
+- `secretKey`: optional secret for integrations.
+- `chain`: blockchain/network (e.g., `bsc`).
+- `grid.long` / `grid.short`: enable long/short grid strategies.
+- `order.*`: order-related defaults (leverage, min balance).
+- `log.*`: logging configuration.
+- `sub.*Size`: default contract sizes per symbol.
 
 ### 🔨 Build
 
@@ -319,7 +356,8 @@ sudo apt install -y \
     libssl-dev \
     libsodium-dev \
     libsecp256k1-dev \
-    libcurl4-openssl-dev
+    libcurl4-openssl-dev \
+    nlohmann-json3-dev
 ```
 
 #### 🍎 安装依赖 (macOS)
@@ -338,6 +376,40 @@ WALLET_PRIVATE_KEY_HEX=你的私钥_不带0x前缀
 ```
 
 ⚠️ **切勿提交 `.env` 文件！** 请将其加入 `.gitignore`。
+
+或者，也可以使用项目根目录下的 `config.properties` 进行配置。示例 `config.properties`：
+
+```properties
+uid = main
+secretKey = YOUR_SECRET_KEY_HERE
+chain = bsc
+grid.long = false
+grid.short = true
+
+order.lever = 10
+order.minAvailBal = 20
+order.blackList =
+order.whiteList = ETH-USD
+
+log.logName = log/default.log
+log.logSize = 100M
+log.logLevel = debug
+
+bark.server =
+
+sub.btcSize = 0.0001
+sub.ethSize = 0.001
+sub.solSize = 0.05
+```
+
+主要字段解释：
+- `uid`：用于通知的用户标识。
+- `secretKey`：可选的集成秘钥。
+- `chain`：链/网络（例如 `bsc`）。
+- `grid.long` / `grid.short`：启用多/空网格策略。
+- `order.*`：下单相关默认值（杠杆，最小余额）。
+- `log.*`：日志配置。
+- `sub.*Size`：各合约的默认下单量。
 
 ### 🔨 编译
 

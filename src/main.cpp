@@ -1,113 +1,72 @@
 #include <fstream>
+#include <iostream>
 #include <map>
+#include <memory>
 
+#include "Poco/AutoPtr.h"
+#include "Poco/Exception.h"
+#include "Poco/File.h"
+#include "Poco/Util/PropertyFileConfiguration.h"
 #include "data.h"
 #include "standx_client.h"
+#include "strategy.h"
 #include "tracer.h"
+#include "util.h"
 
 Config kConfig;
+using Poco::AutoPtr;
+using Poco::NotFoundException;
+using Poco::Util::AbstractConfiguration;
+using Poco::Util::PropertyFileConfiguration;
 
-std::map<std::string, std::string> load_env(const std::string& path = ".env") {
-  std::map<std::string, std::string> env;
-  std::ifstream ifs(path);
-  if (!ifs.is_open()) return env;
-
-  std::string line;
-  while (std::getline(ifs, line)) {
-    size_t start = line.find_first_not_of(" \t\r\n");
-    if (start == std::string::npos || line[start] == '#') continue;
-
-    size_t eq = line.find('=');
-    if (eq == std::string::npos) continue;
-
-    std::string key = line.substr(0, eq);
-    std::string val = line.substr(eq + 1);
-
-    key.erase(0, key.find_first_not_of(" \t"));
-    key.erase(key.find_last_not_of(" \t") + 1);
-    val.erase(0, val.find_first_not_of(" \t"));
-    val.erase(val.find_last_not_of(" \t") + 1);
-
-    if (val.size() >= 2 && ((val.front() == '"' && val.back() == '"') ||
-                            (val.front() == '\'' && val.back() == '\''))) {
-      val = val.substr(1, val.size() - 2);
+void InitConfig() {
+  try {
+    Poco::File dir("log");
+    if (!dir.exists()) {
+      dir.createDirectories();
     }
+    AutoPtr<PropertyFileConfiguration> config =
+        new PropertyFileConfiguration("config.properties");
+    kConfig.uid = config->getString("uid");
+    kConfig.secretKey = config->getString("secretKey");
+    kConfig.chain = config->getString("chain");
+    kConfig.lever = config->getDouble("order.lever");
+    kConfig.minAvailBal = config->getDouble("order.minAvailBal");
+    kConfig.whiteList = config->getString("order.whiteList");
 
-    env[key] = val;
+    kConfig.logName = config->getString("log.logName");
+    kConfig.logSize = config->getString("log.logSize");
+    kConfig.logLevel = config->getString("log.logLevel");
+
+    kConfig.barkServer = config->getString("bark.server");
+    kConfig.subBtcSize = config->getDouble("sub.btcSize");
+    kConfig.subEthSize = config->getDouble("sub.ethSize");
+    kConfig.subSolSize = config->getDouble("sub.solSize");
+    kConfig.gridLong = config->getBool("grid.long");
+    kConfig.gridShort = config->getBool("grid.short");
+
+    logger::Tracer::Init("default", kConfig.logName, kConfig.logSize);
+    logger::Tracer::Init("api", "log/api.log", kConfig.logSize);
+    logger::Tracer::SetLevel(kConfig.logLevel);
+  } catch (NotFoundException& e) {
+    std::cerr << "Config not found: " << e.what() << std::endl;
+    exit(-1);
   }
-  return env;
 }
 
 int main() {
-  logger::Tracer::Init();
+  InitConfig();
 
-  try {
-    auto env = load_env(".env");
-    std::string chain = env["CHAIN"];
-    std::string private_key = env["WALLET_PRIVATE_KEY_HEX"];
+  std::string chain = kConfig.chain;
+  std::string private_key = kConfig.secretKey;
 
-    if (chain.empty() || private_key.empty()) {
-      ERROR("Missing CHAIN or WALLET_PRIVATE_KEY_HEX in .env file");
-      return 1;
-    }
+  auto client = std::make_shared<standx::StandXClient>(chain, private_key,
+                                                       kConfig.whiteList);
+  auto strategy = std::make_shared<Strategy>(client);
+  strategy->start();
 
-    standx::StandXClient client(chain, private_key, "ETH-USD");
-    INFO("Address: " << client.get_address());
-
-    INFO("Querying ETH-USD price...");
-    Ticker ticker;
-    ticker.contract = "ETH-USD";
-    if (client.tickers(ticker)) {
-      INFO("Symbol price: " << ticker.last);
-    }
-
-    INFO("Logging in...");
-    std::string token = client.login();
-    INFO("Access token: " << token);
-
-    INFO("Querying balance...");
-    float availBal = 0.0f, totalBal = 0.0f;
-    if (client.balance(availBal, totalBal)) {
-      INFO("Balance - Available: " << availBal << ", Total: " << totalBal);
-    }
-
-    INFO("Querying order 784080731...");
-    Order test_order;
-    test_order.id = "784080731";
-    if (client.detail(test_order)) {
-        INFO("Order Detail: ID=" << test_order.id << ", Status=" << test_order.status
-                  << ", Price=" << test_order.price << ", Size=" << test_order.size);
-    } else {
-        ERROR("Failed to query order detail");
-    }
-
-    INFO("Querying open orders...");
-    std::list<Order> unfilled_orders;
-    if (client.unfilledOrders(unfilled_orders)) {
-        INFO("Unfilled Orders (" << unfilled_orders.size() << " found)");
-        for (const auto& order : unfilled_orders) {
-            INFO("  - ID: " << order.id << ", Side: " << order.side
-                      << ", Price: " << order.price << ", Size: " << order.size);
-        }
-    } else {
-        ERROR("Failed to query unfilled orders");
-    }
-
-    INFO("Querying positions for ETH-USD...");
-    std::vector<Position> positions_list;
-    if (client.positions(positions_list)) {
-      INFO("Positions (" << positions_list.size() << " found)");
-      for (const auto& pos : positions_list) {
-        INFO("  - Side: " << pos.positionSide
-                          << ", Amount: " << pos.positionAmt);
-      }
-    } else {
-      ERROR("Failed to query positions");
-    }
-
-  } catch (const std::exception& e) {
-    ERROR("Exception: " << e.what());
-    return 1;
+  while (1) {
+    SLEEP_MS(1000);
   }
 
   return 0;

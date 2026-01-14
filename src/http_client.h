@@ -40,8 +40,8 @@ public:
 
 private:
     static size_t write_callback(void* contents, size_t size, size_t nmemb, void* userp);
-    std::string perform_request(const std::string& url, void* headers, const char* method = nullptr, const char* post_data = nullptr);
-    std::string perform_request_internal(const std::string& url, void* headers, const char* method, const char* post_data, bool retry_on_401);
+    std::string perform_request(const std::string& url, void* headers, const std::string& method = "", const std::string& post_data = "");
+    std::string perform_request_internal(const std::string& url, void* headers, const std::string& method, const std::string& post_data, bool retry_on_401);
     void* curl_;
     long last_response_code_;
     TokenRefreshCallback token_refresh_callback_;

@@ -14,6 +14,7 @@ struct Config {
 
   std::string apiKey;
   std::string secretKey;
+  std::string chain;
 
   std::string logName;
   std::string logSize;
