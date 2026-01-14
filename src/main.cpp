@@ -57,6 +57,7 @@ void InitConfig() {
 int main() {
   InitConfig();
   NOTICE("standx start");
+
   std::string chain = kConfig.chain;
   std::string private_key = kConfig.secretKey;
 

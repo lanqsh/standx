@@ -117,6 +117,40 @@ cpp_standx_client/
 - `log.*`: logging configuration.
 - `sub.*Size`: default contract sizes per symbol.
 
+Alternatively, you can configure the client using `config.properties` in the project root. Example `config.properties`:
+
+```properties
+uid = main
+secretKey = YOUR_SECRET_KEY_HERE
+chain = bsc
+grid.long = false
+grid.short = true
+
+order.lever = 10
+order.minAvailBal = 20
+order.blackList =
+order.whiteList = ETH-USD
+
+log.logName = log/default.log
+log.logSize = 100M
+log.logLevel = debug
+
+bark.server =
+
+sub.btcSize = 0.0001
+sub.ethSize = 0.001
+sub.solSize = 0.05
+```
+
+Key fields:
+- `uid`: user identifier used for notifications.
+- `secretKey`: optional secret for integrations.
+- `chain`: blockchain/network (e.g., `bsc`).
+- `grid.long` / `grid.short`: enable long/short grid strategies.
+- `order.*`: order-related defaults (leverage, min balance).
+- `log.*`: logging configuration.
+- `sub.*Size`: default contract sizes per symbol.
+
 ### 🔨 Build
 
 ```bash
@@ -363,6 +397,40 @@ brew install openssl@3 libsodium secp256k1 curl
 ### ⚙️ 配置
 
 请在项目根目录使用 `config.properties` 进行配置（不再使用 `.env`）。示例 `config.properties`：
+
+```properties
+uid = main
+secretKey = YOUR_SECRET_KEY_HERE
+chain = bsc
+grid.long = false
+grid.short = true
+
+order.lever = 10
+order.minAvailBal = 20
+order.blackList =
+order.whiteList = ETH-USD
+
+log.logName = log/default.log
+log.logSize = 100M
+log.logLevel = debug
+
+bark.server =
+
+sub.btcSize = 0.0001
+sub.ethSize = 0.001
+sub.solSize = 0.05
+```
+
+主要字段解释：
+- `uid`：用于通知的用户标识。
+- `secretKey`：可选的集成秘钥。
+- `chain`：链/网络（例如 `bsc`）。
+- `grid.long` / `grid.short`：启用多/空网格策略。
+- `order.*`：下单相关默认值（杠杆，最小余额）。
+- `log.*`：日志配置。
+- `sub.*Size`：各合约的默认下单量。
+
+或者，也可以使用项目根目录下的 `config.properties` 进行配置。示例 `config.properties`：
 
 ```properties
 uid = main
