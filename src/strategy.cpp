@@ -80,7 +80,7 @@ void Strategy::InitParameters() {
   } else if (instId_ == "ETH-USD") {
     grid_size_ = kConfig.subEthSize;
     base_price_ = 4000;
-    order_interval_ = 4;
+    order_interval_ = 5;
   } else if (instId_ == "SOL-USD") {
     grid_size_ = kConfig.subSolSize;
     base_price_ = 200;
@@ -731,22 +731,24 @@ void Strategy::MakeShortPlaceOrders() {
 }
 
 void Strategy::SyncPlacedOrderWithUnfilled(Order& order) {
-  SLEEP_MS(1000);
-  CheckUnfilledOrders();
   DEBUG("Sync placed order, price: " << order.price << ", side: " << order.side
                                      << ", positionSide: "
                                      << order.positionSide);
-  for (auto& u : unfilled_orders_) {
-    DEBUG("Sync placed order, u price: "
-          << u.price << ", side: " << u.side << ", status: " << u.status
-          << ", positionSide: " << u.positionSide);
-    if (u.side == order.side && u.status == "NEW" &&
-        areFloatsEqual(u.price, order.price, PRICE_ACCURACY_FLOAT)) {
-      order.id = u.id;
-      order.status = "NEW";
-      DEBUG("Synced placed order with unfilled list, price: "
-            << order.price << ", id: " << order.id);
-      return;
+  for (int i = 0; i < 10; ++i) {
+    SLEEP_MS(1000);
+    CheckUnfilledOrders();
+    for (auto& u : unfilled_orders_) {
+      DEBUG("Sync placed order, u price: "
+            << u.price << ", side: " << u.side << ", status: " << u.status
+            << ", positionSide: " << u.positionSide);
+      if (u.side == order.side && u.status == "NEW" &&
+          areFloatsEqual(u.price, order.price, PRICE_ACCURACY_FLOAT)) {
+        order.id = u.id;
+        order.status = "NEW";
+        DEBUG("Synced placed order with unfilled list, price: "
+              << order.price << ", id: " << order.id);
+        return;
+      }
     }
   }
   order.status = "FILLED_OPEN_IMMEDIATE";
@@ -755,22 +757,24 @@ void Strategy::SyncPlacedOrderWithUnfilled(Order& order) {
 }
 
 void Strategy::SyncTpOrderWithUnfilled(Order& order) {
-  SLEEP_MS(1000);
   DEBUG("Sync tp order, price: " << order.price << ", side: " << order.side
                                  << ", positionSide: " << order.positionSide
                                  << ", tp_price: " << order.tp_price);
-  CheckUnfilledOrders();
-  for (auto& u : unfilled_orders_) {
-    DEBUG("Sync tp order, u price: " << u.price << ", side: " << u.side
-                                     << ", status: " << u.status
-                                     << ", positionSide: " << u.positionSide);
-    if (u.is_reduce_only && u.positionSide == order.positionSide &&
-        areFloatsEqual(u.price, order.tp_price, PRICE_ACCURACY_FLOAT)) {
-      order.tpId = u.id;
-      order.status = "FILLED";
-      DEBUG("Synced TP order with unfilled list, tp_price: "
-            << order.tp_price << ", tpId: " << order.tpId);
-      return;
+  for (int i = 0; i < 10; ++i) {
+    SLEEP_MS(1000);
+    CheckUnfilledOrders();
+    for (auto& u : unfilled_orders_) {
+      DEBUG("Sync tp order, u price: " << u.price << ", side: " << u.side
+                                       << ", status: " << u.status
+                                       << ", positionSide: " << u.positionSide);
+      if (u.is_reduce_only && u.positionSide == order.positionSide &&
+          areFloatsEqual(u.price, order.tp_price, PRICE_ACCURACY_FLOAT)) {
+        order.tpId = u.id;
+        order.status = "FILLED";
+        DEBUG("Synced TP order with unfilled list, tp_price: "
+              << order.tp_price << ", tpId: " << order.tpId);
+        return;
+      }
     }
   }
   order.status = "FILLED_CLOSE_IMMEDIATE";

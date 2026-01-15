@@ -409,7 +409,13 @@ void StandXClient::cancelOrder(const std::string& id) {
   }
 
   nlohmann::json cancel_req;
-  cancel_req["order_id"] = id;
+  try {
+    long long oid = std::stoll(id);
+    cancel_req["order_id"] = oid;
+  } catch (const std::exception& e) {
+    ERROR("Invalid order id for cancel: " << id << ": " << e.what());
+    return;
+  }
 
   std::string url = api_base_url_ + "/api/cancel_order";
   std::string body = cancel_req.dump();
