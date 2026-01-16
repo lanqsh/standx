@@ -635,7 +635,6 @@ void Strategy::MakeLongPlaceOrders() {
         });
 
     if (place_order_exists) {
-      DEBUG("place order exists " << place_price_str);
       continue;
     }
 
