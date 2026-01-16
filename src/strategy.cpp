@@ -630,10 +630,6 @@ void Strategy::MakeLongPlaceOrders() {
     bool place_order_exists = std::any_of(
         unfilled_orders_.begin(), unfilled_orders_.end(),
         [&](const auto& order) {
-          DEBUG("Checking unfilled order price: "
-                << order.is_reduce_only
-                << ", positionSide: " << order.positionSide
-                << ", place_price: " << order.price << " vs " << place_price);
           return !order.is_reduce_only && order.positionSide == "LONG" &&
                  areFloatsEqual(order.price, place_price, PRICE_ACCURACY_FLOAT);
         });
