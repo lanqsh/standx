@@ -203,20 +203,20 @@ void Strategy::CheckFilledLongOrders() {
       for (int i = 0; i < try_count; ++i) {
         float tp_price =
             std::max(current_fix_long_price_, order.price) + order_interval_;
-        DEBUG("Calculated tp_price: "
-              << tp_price << ", current_fix_long_price_: "
-              << current_fix_long_price_ << ", order.price: " << order.price
-              << ", order_interval_: " << order_interval_);
         order.size = grid_size_;
         order.tp_price = tp_price;
         order.side = "SELL";
         order.positionSide = "LONG";
         order.type = "LIMIT";
+        DEBUG("TRADE Calculated tp_price: "
+              << tp_price << ", current_fix_long_price_: "
+              << current_fix_long_price_ << ", order.price: " << order.price
+              << ", order_interval_: " << order_interval_);
 
         if (!client_->tpOrder(order)) {
           UpdatePrice();
         } else {
-          SyncTpOrderWithUnfilled(order);
+          SyncTpOrderId(order);
           DEBUG("TRADE Place TP order ok for "
                 << it->first << " " << order.price << " " << order_interval_
                 << " " << current_fix_long_price_ << ", tp_price: " << tp_price
@@ -225,78 +225,78 @@ void Strategy::CheckFilledLongOrders() {
         }
       }
     }
+  }
 
-    // pending tp orders FILLED check
-    for (auto it = long_grid_order_list_.begin();
-         it != long_grid_order_list_.end(); ++it) {
-      Order& order = it->second;
-      if (order.status != "FILLED" &&
-          order.status != "FILLED_CLOSE_IMMEDIATE") {
-        continue;
-      }
+  // pending tp orders FILLED check
+  for (auto it = long_grid_order_list_.begin();
+       it != long_grid_order_list_.end(); ++it) {
+    Order& order = it->second;
+    if (order.status != "FILLED" && order.status != "FILLED_CLOSE_IMMEDIATE") {
+      continue;
+    }
 
-      Order tmp = it->second;
-      tmp.id = tmp.tpId;
-      bool tp = false;
-      if (order.status == "FILLED_CLOSE_IMMEDIATE") {
+    Order tmp = it->second;
+    tmp.id = tmp.tpId;
+    bool tp = false;
+    if (order.status == "FILLED_CLOSE_IMMEDIATE") {
+      tp = true;
+    } else if (client_->detail(tmp)) {
+      INFO("Check Filled tp order: " << tmp.price << ", key: " << it->first
+                                     << ", tmp.id: " << tmp.id
+                                     << ", status: " << tmp.status);
+      if (tmp.status == "FILLED") {
         tp = true;
-      } else if (client_->detail(tmp)) {
-        INFO("Check Filled tp order: " << tmp.price << ", key: " << it->first
-                                       << ", tmp.id: " << tmp.id
-                                       << ", status: " << tmp.status);
-        if (tmp.status == "FILLED") {
-          tp = true;
-        } else if (tmp.status == "FAILED") {
-          ERROR("tp order failed: " << it->first);
-          long_grid_order_list_.erase(it);
-          break;
-        } else if (tmp.status == "NEW") {
-          float tp_price =
-              std::max(current_fix_long_price_, order.price) + order_interval_;
-          if (tmp.tp_price > tp_price + PRICE_ACCURACY_FLOAT) {
-            order.size = grid_size_;
-            order.tp_price = tp_price;
-            order.side = "SELL";
-            order.positionSide = "LONG";
-            order.type = "LIMIT";
-            if (!client_->tpOrder(order)) {
-              NOTICE("Failed to update long TP order for " << it->first);
-              continue;
-            } else {
-              SyncTpOrderWithUnfilled(order);
-              client_->cancelOrder(tmp.id);
-              DEBUG("Updating long TP order ok for "
-                    << it->first << " " << order.price << " " << order_interval_
-                    << " " << current_fix_long_price_ << ", old tp price: "
-                    << tmp.tp_price << ", new tp price: " << tp_price
-                    << ", tp id: " << order.tpId);
-            }
+      } else if (tmp.status == "FAILED") {
+        ERROR("tp order failed: " << it->first);
+        long_grid_order_list_.erase(it);
+        break;
+      } else if (tmp.status == "NEW") {
+        float tp_price =
+            std::max(current_fix_long_price_, order.price) + order_interval_;
+        if (tmp.tp_price > tp_price + PRICE_ACCURACY_FLOAT) {
+          order.size = grid_size_;
+          order.tp_price = tp_price;
+          order.side = "SELL";
+          order.positionSide = "LONG";
+          order.type = "LIMIT";
+          DEBUG("TRADE re tp at: " << order.tp_price);
+          if (!client_->tpOrder(order)) {
+            NOTICE("Failed to update long TP order for " << it->first);
+            continue;
+          } else {
+            client_->cancelOrder(tmp.id);
+            SyncTpOrderId(order);
+            DEBUG("Updating long TP order ok for "
+                  << it->first << " " << order.price << " " << order_interval_
+                  << " " << current_fix_long_price_ << ", old tp id: "
+                  << tmp.id << ", new tp price: " << tp_price
+                  << ", new tp id: " << order.tpId);
           }
-          DEBUG("tp order still NEW: " << it->first);
-          break;
-        } else if (tmp.status == "PARTIALLY_FILLED") {
-          DEBUG("tp order PARTIALLY_FILLED: " << it->first);
-          break;
-        } else if (tmp.status == "CANCELED") {
-          DEBUG("place order CANCELED: " << it->first);
-          order.status = "IDLE";
-          break;
-        } else {
-          ERROR("tp order failed: " << it->first << ", id: " << tmp.id
-                                    << ", status: " << tmp.status);
-          break;
         }
+        DEBUG("tp order still NEW: " << it->first);
+        break;
+      } else if (tmp.status == "PARTIALLY_FILLED") {
+        DEBUG("tp order PARTIALLY_FILLED: " << it->first);
+        break;
+      } else if (tmp.status == "CANCELED") {
+        DEBUG("place order CANCELED: " << it->first);
+        order.status = "IDLE";
+        break;
+      } else {
+        ERROR("tp order failed: " << it->first << ", id: " << tmp.id
+                                  << ", status: " << tmp.status);
+        break;
       }
+    }
 
-      if (tp) {
-        ++success_trades_total_;
-        ++success_trades_daily_;
-        NOTICE("TRADE long  tp success: " << success_trades_total_ << " "
-                                          << it->first << " <-> "
-                                          << it->second.tp_price);
-        it->second.status = "IDLE";
-        continue;
-      }
+    if (tp) {
+      ++success_trades_total_;
+      ++success_trades_daily_;
+      NOTICE("TRADE long  tp success: " << success_trades_total_ << " "
+                                        << it->first << " <-> "
+                                        << it->second.tp_price);
+      it->second.status = "IDLE";
+      continue;
     }
   }
 }
@@ -352,14 +352,14 @@ void Strategy::CheckFilledShortOrders() {
         order.side = "BUY";
         order.positionSide = "SHORT";
         order.type = "LIMIT";
-
+        DEBUG("TRADE Placing short tp order at price: " << order.tp_price);
         if (!client_->tpOrder(order)) {
           UpdatePrice();
         } else {
-          SyncTpOrderWithUnfilled(order);
+          SyncTpOrderId(order);
           DEBUG("TRADE Place TP order ok for "
                 << it->first << " " << order.price << " " << order_interval_
-                << " " << current_fix_long_price_ << ", tp_price: " << tp_price
+                << " " << current_fix_short_price_ << ", tp_price: " << tp_price
                 << ", tp id: " << order.tpId);
           break;
         }
@@ -399,17 +399,18 @@ void Strategy::CheckFilledShortOrders() {
           order.side = "BUY";
           order.positionSide = "SHORT";
           order.type = "LIMIT";
+          DEBUG("TRADE re tp at: " << order.tp_price);
           if (!client_->tpOrder(order)) {
             NOTICE("Failed to place TP order for " << it->first);
             continue;
           } else {
-            SyncTpOrderWithUnfilled(order);
             client_->cancelOrder(tmp.id);
+            SyncTpOrderId(order);
             DEBUG("Updating short TP order ok for "
                   << it->first << " " << order.price << " " << order_interval_
-                  << " " << current_fix_short_price_ << ", old tp price: "
-                  << tmp.tp_price << ", new tp price: " << tp_price
-                  << ", tp id: " << order.tpId);
+                  << " " << current_fix_short_price_
+                  << ", old tp id: " << tmp.id << ", new tp price: " << tp_price
+                  << ", new tp id: " << order.tpId);
           }
         }
         DEBUG("tp order still NEW: " << it->first);
@@ -630,16 +631,11 @@ void Strategy::MakeLongPlaceOrders() {
     bool place_order_exists = std::any_of(
         unfilled_orders_.begin(), unfilled_orders_.end(),
         [&](const auto& order) {
-          DEBUG("Checking unfilled order price: "
-                << order.is_reduce_only
-                << ", positionSide: " << order.positionSide
-                << ", place_price: " << order.price << " vs " << place_price);
           return !order.is_reduce_only && order.positionSide == "LONG" &&
                  areFloatsEqual(order.price, place_price, PRICE_ACCURACY_FLOAT);
         });
 
     if (place_order_exists) {
-      DEBUG("place order exists " << place_price_str);
       continue;
     }
 
@@ -664,8 +660,9 @@ void Strategy::MakeLongPlaceOrders() {
       order.price = place_price;
       order.size = grid_size_;
       order.status = "NEW";
+      DEBUG("TRADE Making long place order at price: " << place_price);
       if (client_->placeOrder(order)) {
-        SyncPlacedOrderWithUnfilled(order);
+        SyncPlacedOrderId(order);
         long_grid_order_list_[place_price_str] = order;
         NOTICE("TRADE Place Long Order: "
                << order.contract << " " << order.id << ", size: " << order.size
@@ -716,8 +713,9 @@ void Strategy::MakeShortPlaceOrders() {
       order.price = place_price;
       order.size = grid_size_;
       order.status = "NEW";
+      DEBUG("TRADE Making short place order at price: " << place_price);
       if (client_->placeOrder(order)) {
-        SyncPlacedOrderWithUnfilled(order);
+        SyncPlacedOrderId(order);
         short_grid_order_list_[place_price_str] = order;
         NOTICE("TRADE Place Short Order: "
                << order.contract << " " << order.id << ", size: " << order.size
@@ -730,7 +728,7 @@ void Strategy::MakeShortPlaceOrders() {
   }
 }
 
-void Strategy::SyncPlacedOrderWithUnfilled(Order& order) {
+void Strategy::SyncPlacedOrderId(Order& order) {
   DEBUG("Sync placed order, price: " << order.price << ", side: " << order.side
                                      << ", positionSide: "
                                      << order.positionSide);
@@ -756,7 +754,7 @@ void Strategy::SyncPlacedOrderWithUnfilled(Order& order) {
         << order.price);
 }
 
-void Strategy::SyncTpOrderWithUnfilled(Order& order) {
+void Strategy::SyncTpOrderId(Order& order) {
   DEBUG("Sync tp order, price: " << order.price << ", side: " << order.side
                                  << ", positionSide: " << order.positionSide
                                  << ", tp_price: " << order.tp_price);
@@ -814,11 +812,11 @@ void Strategy::MakeLongTpOrders() {
     order.size = grid_size_;
 
     auto it = long_grid_order_list_.find(tp_price_str);
-    DEBUG("Placing long tp order at price: "
+    DEBUG("TRADE Placing long tp order at price: "
           << tp_price << ", key: " << tp_price_str
           << ", current_price_: " << current_price_);
     if (client_->tpOrder(order)) {
-      SyncTpOrderWithUnfilled(order);
+      SyncTpOrderId(order);
       long_reduce_size_ += grid_size_;
       if (it != long_grid_order_list_.end()) {
         it->second.tpId = order.tpId;
@@ -871,11 +869,11 @@ void Strategy::MakeShortTpOrders() {
     order.size = grid_size_;
 
     auto it = short_grid_order_list_.find(tp_price_str);
-    DEBUG("Placing short tp order at price: "
+    DEBUG("TRADE Placing short tp order at price: "
           << tp_price << ", key: " << tp_price_str
           << ", current_price_: " << current_price_);
     if (client_->tpOrder(order)) {
-      SyncTpOrderWithUnfilled(order);
+      SyncTpOrderId(order);
       short_reduce_size_ += grid_size_;
       if (it != short_grid_order_list_.end()) {
         it->second.tpId = order.tpId;

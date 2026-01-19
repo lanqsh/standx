@@ -384,7 +384,8 @@ sudo apt install -y \
     libsodium-dev \
     libsecp256k1-dev \
     libcurl4-openssl-dev \
-    nlohmann-json3-dev
+    nlohmann-json3-dev \
+    libpoco-dev
 ```
 
 #### 🍎 安装依赖 (macOS)
