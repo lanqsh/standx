@@ -39,12 +39,13 @@ struct Ticker {
 
 struct Order {
   bool is_reduce_only{false};
-  float size;
-  int rule;
+  float size{0.0};
   float last_close_pnl;
-  float price;
-  float tp_price;
-  float sl_price;
+  float price{0.0};
+  float tp_price{0.0};
+  float sl_price{0.0};
+  int rule;
+
   std::string contract;
   std::string id;
   std::string tpId;
