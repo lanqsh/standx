@@ -231,7 +231,7 @@ void Strategy::CheckFilledLongOrders() {
   for (auto it = long_grid_order_list_.begin();
        it != long_grid_order_list_.end(); ++it) {
     Order& order = it->second;
-    if (order.status != "FILLED" && order.status != "FILLED_CLOSE_IMMEDIATE") {
+    if (order.status != "FILLED_CLOSE_WAIT" && order.status != "FILLED_CLOSE_IMMEDIATE") {
       continue;
     }
 
@@ -368,7 +368,7 @@ void Strategy::CheckFilledShortOrders() {
   for (auto it = short_grid_order_list_.rbegin();
        it != short_grid_order_list_.rend(); ++it) {
     Order& order = it->second;
-    if (order.status != "FILLED" && order.status != "FILLED_CLOSE_IMMEDIATE") {
+    if (order.status != "FILLED_CLOSE_WAIT" && order.status != "FILLED_CLOSE_IMMEDIATE") {
       continue;
     }
 
@@ -605,7 +605,8 @@ void Strategy::InitLongTpOrders() {
 void Strategy::InitShortTpOrders() {
   for (auto& order : unfilled_orders_) {
     if (order.is_reduce_only && order.positionSide == "SHORT") {
-      auto price_str = adjustDecimalPlaces(order.price, order_price_round_);
+      auto price_str = adjustDecimalPlaces(order.price + order_interval_,
+                                           order_price_round_);
       if (short_grid_order_list_.find(price_str) ==
           short_grid_order_list_.end()) {
         NOTICE("Init tp short order not in grid list, price: "
@@ -766,7 +767,7 @@ void Strategy::SyncTpOrderId(Order& order) {
       if (u.is_reduce_only && u.positionSide == order.positionSide &&
           areFloatsEqual(u.price, order.tp_price, PRICE_ACCURACY_FLOAT)) {
         order.tpId = u.id;
-        order.status = "FILLED";
+        order.status = "FILLED_CLOSE_WAIT";
         DEBUG("Synced TP order with unfilled list, tp_price: "
               << order.tp_price << ", tpId: " << order.tpId);
         return;
