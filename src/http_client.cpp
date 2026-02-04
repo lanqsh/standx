@@ -133,7 +133,6 @@ std::string HttpClient::post_json_with_auth(
   headers = curl_slist_append(headers, auth_header.c_str());
   headers = curl_slist_append(headers, "Content-Type: application/json");
 
-  // Add extra headers
   for (const auto& pair : extra_headers) {
     std::string header = pair.first + ": " + pair.second;
     headers = curl_slist_append(headers, header.c_str());

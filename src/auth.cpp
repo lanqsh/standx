@@ -207,9 +207,8 @@ std::string AuthManager::sign_hash_base64(const std::string& message) {
 
     unsigned char outsig[65];
     memcpy(outsig, sig64, 64);
-    outsig[64] = (unsigned char)(recid + 27);  // Ethereum convention
+    outsig[64] = (unsigned char)(recid + 27);
 
-    // Base64 encode
     return base64_encode(outsig, 65);
 }
 
@@ -226,11 +225,9 @@ std::string AuthManager::sign_ecdsa_64_base64(const std::string& message) {
         throw std::runtime_error("secp256k1 sign failed");
     }
 
-    // Serialize to compact format (64 bytes: r + s)
     unsigned char sig64[64];
     secp256k1_ecdsa_signature_serialize_compact(impl_->ctx, sig64, &sig);
 
-    // Base64 encode (only 64 bytes, no recovery id)
     return base64_encode(sig64, 64);
 }
 
@@ -239,7 +236,6 @@ std::string AuthManager::sign_ed25519_base64(const std::string& message) {
         throw std::runtime_error("private key not set");
     }
 
-    // Ed25519 signature (64 bytes)
     unsigned char signature[crypto_sign_BYTES];
     unsigned long long sig_len;
 
@@ -251,12 +247,10 @@ std::string AuthManager::sign_ed25519_base64(const std::string& message) {
         impl_->ed25519_sk
     );
 
-    // Base64 encode (64 bytes)
     return base64_encode(signature, crypto_sign_BYTES);
 }
 
 bool AuthManager::verify_jwt(const std::string& signed_data) {
-    // Simplified JWT verification (can be expanded)
     return !signed_data.empty();
 }
 
