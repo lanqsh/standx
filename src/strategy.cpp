@@ -231,7 +231,8 @@ void Strategy::CheckFilledLongOrders() {
   for (auto it = long_grid_order_list_.begin();
        it != long_grid_order_list_.end(); ++it) {
     Order& order = it->second;
-    if (order.status != "FILLED_CLOSE_WAIT" && order.status != "FILLED_CLOSE_IMMEDIATE") {
+    if (order.status != "FILLED_CLOSE_WAIT" &&
+        order.status != "FILLED_CLOSE_IMMEDIATE") {
       continue;
     }
 
@@ -368,7 +369,8 @@ void Strategy::CheckFilledShortOrders() {
   for (auto it = short_grid_order_list_.rbegin();
        it != short_grid_order_list_.rend(); ++it) {
     Order& order = it->second;
-    if (order.status != "FILLED_CLOSE_WAIT" && order.status != "FILLED_CLOSE_IMMEDIATE") {
+    if (order.status != "FILLED_CLOSE_WAIT" &&
+        order.status != "FILLED_CLOSE_IMMEDIATE") {
       continue;
     }
 
@@ -643,7 +645,7 @@ void Strategy::MakeLongPlaceOrders() {
     if (it == long_grid_order_list_.end()) {
       place_order_idle = true;
       DEBUG("place order not exist " << place_price_str);
-    } else if (it->second.status == "IDLE") {
+    } else if (it->second.status == "IDLE" || it->second.side != "BUY") {
       place_order_idle = true;
       DEBUG("place order IDLE " << place_price_str);
     } else {
@@ -678,6 +680,8 @@ void Strategy::MakeShortPlaceOrders() {
   for (int i = 0; i < ORDER_NUM; ++i) {
     float place_price = current_fix_long_price_ + order_interval_ * (i);
     auto place_price_str = adjustDecimalPlaces(place_price, order_price_round_);
+    DEBUG("MakeShortPlaceOrders place_price: "
+          << place_price << ", current_price_: " << current_price_);
     if (place_price - current_price_ < order_interval_ * 0.5) continue;
 
     bool place_order_exists = std::any_of(
@@ -696,12 +700,13 @@ void Strategy::MakeShortPlaceOrders() {
     if (it == short_grid_order_list_.end()) {
       place_order_idle = true;
       DEBUG("place order not exist " << place_price_str);
-    } else if (it->second.status == "IDLE") {
+    } else if (it->second.status == "IDLE" || it->second.side != "SELL") {
       place_order_idle = true;
       DEBUG("place order IDLE " << place_price_str);
     } else {
-      DEBUG("place order found in grid list, status: "
-            << it->second.status << ", price: " << it->second.price);
+      DEBUG("place order found in grid list "
+            << it->first << " , status:" << it->second.status
+            << ", price: " << it->second.price);
     }
 
     if (place_order_idle) {
@@ -742,15 +747,15 @@ void Strategy::SyncPlacedOrderId(Order& order) {
           areFloatsEqual(u.price, order.price, PRICE_ACCURACY_FLOAT)) {
         order.id = u.id;
         order.status = "NEW";
-        DEBUG("Synced placed order with unfilled list, price: "
-              << order.price << ", id: " << order.id);
+        DEBUG("Sync placed order with unfilled list, price: "
+              << order.price << ", id: " << order.id << " " << order.status);
         return;
       }
     }
   }
   order.status = "FILLED_OPEN_IMMEDIATE";
-  DEBUG("Placed order not found in unfilled list, mark FILLED, price: "
-        << order.price);
+  DEBUG("Sync placed order not found in unfilled list, mark FILLED, price: "
+        << order.price << " " << order.status);
 }
 
 void Strategy::SyncTpOrderId(Order& order) {
@@ -768,15 +773,16 @@ void Strategy::SyncTpOrderId(Order& order) {
           areFloatsEqual(u.price, order.tp_price, PRICE_ACCURACY_FLOAT)) {
         order.tpId = u.id;
         order.status = "FILLED_CLOSE_WAIT";
-        DEBUG("Synced TP order with unfilled list, tp_price: "
-              << order.tp_price << ", tpId: " << order.tpId);
+        DEBUG("Sync tp order with unfilled list, tp_price: "
+              << order.tp_price << ", tpId: " << order.tpId << " "
+              << order.status);
         return;
       }
     }
   }
   order.status = "FILLED_CLOSE_IMMEDIATE";
-  DEBUG("TP order not found in unfilled list, mark FILLED, tp_price: "
-        << order.tp_price);
+  DEBUG("Sync tp order not found in unfilled list, mark FILLED, tp_price: "
+        << order.tp_price << " " << order.status);
 }
 
 void Strategy::MakeLongTpOrders() {
