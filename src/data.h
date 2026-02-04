@@ -44,7 +44,7 @@ struct Order {
   float price{0.0};
   float tp_price{0.0};
   float sl_price{0.0};
-  int rule;
+  int rule{0};
 
   std::string contract;
   std::string id;

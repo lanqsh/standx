@@ -308,16 +308,16 @@ bool StandXClient::placeOrder(Order& order) {
         http_->post_json_with_auth(url, body, access_token_, extra_headers);
 
     auto json_response = nlohmann::json::parse(response);
-        if (json_response.contains("message") &&
-            json_response["message"].is_string()) {
-          std::string msg = json_response["message"].get<std::string>();
-          if (msg == "success") {
-            DEBUG("Order placed ok: " << order.id);
-            return true;
-          } else {
-            DEBUG("Order placement returned message: " << msg);
-          }
-        }
+    if (json_response.contains("message") &&
+        json_response["message"].is_string()) {
+      std::string msg = json_response["message"].get<std::string>();
+      if (msg == "success") {
+        DEBUG("Order placed ok");
+        return true;
+      } else {
+        DEBUG("Order placement returned message: " << msg);
+      }
+    }
   } catch (const std::exception& e) {
     ERROR("Failed to place order: " << e.what());
   }
@@ -382,16 +382,16 @@ bool StandXClient::tpOrder(Order& order) {
         http_->post_json_with_auth(url, body, access_token_, extra_headers);
 
     auto json_response = nlohmann::json::parse(response);
-        if (json_response.contains("message") &&
-            json_response["message"].is_string()) {
-          std::string msg = json_response["message"].get<std::string>();
-          if (msg == "success") {
-            DEBUG("TP order placed ok: " << order.id);
-            return true;
-          } else {
-            DEBUG("TP placement returned message: " << msg);
-          }
-        }
+    if (json_response.contains("message") &&
+        json_response["message"].is_string()) {
+      std::string msg = json_response["message"].get<std::string>();
+      if (msg == "success") {
+        DEBUG("TP order placed ok: " << order.id);
+        return true;
+      } else {
+        DEBUG("TP placement returned message: " << msg);
+      }
+    }
   } catch (const std::exception& e) {
     ERROR("Failed to place TP order: " << e.what());
   }
