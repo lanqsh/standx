@@ -312,10 +312,7 @@ bool StandXClient::placeOrder(Order& order) {
         json_response["message"].is_string()) {
       std::string msg = json_response["message"].get<std::string>();
       if (msg == "success") {
-        DEBUG("Order placed ok");
         return true;
-      } else {
-        DEBUG("Order placement returned message: " << msg);
       }
     }
   } catch (const std::exception& e) {
@@ -386,10 +383,7 @@ bool StandXClient::tpOrder(Order& order) {
         json_response["message"].is_string()) {
       std::string msg = json_response["message"].get<std::string>();
       if (msg == "success") {
-        DEBUG("TP order placed ok: " << order.id);
         return true;
-      } else {
-        DEBUG("TP placement returned message: " << msg);
       }
     }
   } catch (const std::exception& e) {
