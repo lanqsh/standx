@@ -194,18 +194,20 @@ void Strategy::CheckFilledLongOrders() {
     }
 
     if (tp) {
-      int try_count = 10;
+      int try_count = 3;
+      float tp_price =
+          std::max(current_fix_long_price_, order.price) + order_interval_;
+      order.size = grid_size_;
+      order.tp_price = tp_price;
+      order.side = "SELL";
+      order.positionSide = "LONG";
+      order.type = "LIMIT";
       for (int i = 0; i < try_count; ++i) {
-        float tp_price =
-            std::max(current_fix_long_price_, order.price) + order_interval_;
-        order.size = grid_size_;
-        order.tp_price = tp_price;
-        order.side = "SELL";
-        order.positionSide = "LONG";
-        order.type = "LIMIT";
-
         if (!client_->tpOrder(order)) {
+          SLEEP_MS(1000);
           UpdatePrice();
+          NOTICE("Failed to place long TP order for "
+                 << it->first << ", try count: " << i + 1);
         } else {
           SyncTpOrderId(order);
           break;
@@ -254,7 +256,7 @@ void Strategy::CheckFilledLongOrders() {
             SyncTpOrderId(order);
             NOTICE("Updating long TP order ok for "
                    << it->first << " price: " << tmp.tp_price << " " << tp_price
-                   << "id: " << tmp.id << " " << order.tpId);
+                   << " id: " << tmp.id << " " << order.tpId);
           }
         }
         break;
@@ -321,17 +323,20 @@ void Strategy::CheckFilledShortOrders() {
     }
 
     if (tp) {
-      int try_count = 10;
+      int try_count = 3;
+      float tp_price =
+          std::min(current_fix_short_price_, order.price) - order_interval_;
+      order.size = grid_size_;
+      order.tp_price = tp_price;
+      order.side = "BUY";
+      order.positionSide = "SHORT";
+      order.type = "LIMIT";
       for (int i = 0; i < try_count; ++i) {
-        float tp_price =
-            std::min(current_fix_short_price_, order.price) - order_interval_;
-        order.size = grid_size_;
-        order.tp_price = tp_price;
-        order.side = "BUY";
-        order.positionSide = "SHORT";
-        order.type = "LIMIT";
         if (!client_->tpOrder(order)) {
+          SLEEP_MS(1000);
           UpdatePrice();
+          NOTICE("Failed to place short TP order for "
+                 << it->first << ", try count: " << i + 1);
         } else {
           SyncTpOrderId(order);
           break;
@@ -381,7 +386,7 @@ void Strategy::CheckFilledShortOrders() {
             SyncTpOrderId(order);
             NOTICE("Updating short TP order ok for "
                    << it->first << " price: " << tmp.tp_price << " " << tp_price
-                   << "id: " << tmp.id << " " << order.tpId);
+                   << " id: " << tmp.id << " " << order.tpId);
           }
         }
         break;
@@ -687,11 +692,16 @@ void Strategy::SyncPlacedOrderId(Order& order) {
           areFloatsEqual(u.price, order.price, PRICE_ACCURACY_FLOAT)) {
         order.id = u.id;
         order.status = "NEW";
+        NOTICE("sync placed order price " << order.price
+                                          << ", status: " << order.status
+                                          << ", id: " << order.id);
         return;
       }
     }
   }
   order.status = "FILLED_OPEN_IMMEDIATE";
+  NOTICE("sync placed order price " << order.price << ", status: "
+                                    << order.status << ", id: " << order.id);
 }
 
 void Strategy::SyncTpOrderId(Order& order) {
@@ -703,11 +713,16 @@ void Strategy::SyncTpOrderId(Order& order) {
           areFloatsEqual(u.price, order.tp_price, PRICE_ACCURACY_FLOAT)) {
         order.tpId = u.id;
         order.status = "FILLED_CLOSE_WAIT";
+        NOTICE("sync TP order tp_price " << order.tp_price
+                                         << ", status: " << order.status
+                                         << ", tpId: " << order.tpId);
         return;
       }
     }
   }
   order.status = "FILLED_CLOSE_IMMEDIATE";
+  NOTICE("sync TP order tp_price " << order.tp_price << ", status: "
+                                   << order.status << ", tpId: " << order.tpId);
 }
 
 void Strategy::MakeLongTpOrders() {
