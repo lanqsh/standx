@@ -139,9 +139,9 @@ bool StandXClient::detail(Order& order) {
   }
 
   std::string url = api_base_url_ + "/api/query_order?order_id=" + order.id;
-
+  std::string response;
   try {
-    std::string response = request_with_retry(url);
+    response = request_with_retry(url);
     auto json = nlohmann::json::parse(response);
 
     if (json.contains("status") && json["status"].is_string()) {
@@ -150,7 +150,8 @@ bool StandXClient::detail(Order& order) {
 
     return true;
   } catch (const std::exception& e) {
-    ERROR("Error parsing order detail response: " << e.what());
+    ERROR("Error parsing order detail response: " << e.what() << ", response: "
+                                                  << response);
     return false;
   }
 }
@@ -164,14 +165,14 @@ bool StandXClient::unfilledOrders(std::list<Order>& order_list) {
   if (!symbol_.empty()) {
     url += "?symbol=" + symbol_;
   }
+  std::string response;
 
   try {
-    std::string response = request_with_retry(url);
+    response = request_with_retry(url);
     auto json = nlohmann::json::parse(response);
 
-    order_list.clear();
-
     if (json.contains("result") && json["result"].is_array()) {
+      order_list.clear();
       for (const auto& item : json["result"]) {
         Order order;
 
@@ -221,16 +222,18 @@ bool StandXClient::unfilledOrders(std::list<Order>& order_list) {
 
     return true;
   } catch (const std::exception& e) {
-    ERROR("Error parsing unfilled orders response: " << e.what());
+    ERROR("Error parsing unfilled orders response: "
+          << e.what() << ", response: " << response);
     return false;
   }
 }
 
 bool StandXClient::tickers(Ticker& tk) {
   std::string url = api_base_url_ + "/api/query_symbol_price?symbol=" + symbol_;
+  std::string response;
 
   try {
-    std::string response = http_->get(url);
+    response = http_->get(url);
     auto json = nlohmann::json::parse(response);
 
     if (json.contains("last_price") && json["last_price"].is_string()) {
@@ -238,10 +241,10 @@ bool StandXClient::tickers(Ticker& tk) {
       return true;
     }
 
-    ERROR("Price field not found in response");
+    ERROR("Price field not found in response or is not a string: " << response);
     return false;
   } catch (const std::exception& e) {
-    ERROR("Failed to query ticker: " << e.what());
+    ERROR("Failed to query ticker: " << e.what() << ", response: " << response);
     return false;
   }
 }
@@ -295,7 +298,7 @@ bool StandXClient::placeOrder(Order& order) {
   std::string version = "v1";
   std::string message =
       version + "," + request_id + "," + timestamp + "," + body;
-
+  std::string response;
   std::string signature = auth_->sign_ed25519_base64(message);
   std::map<std::string, std::string> extra_headers;
   extra_headers["x-request-sign-version"] = version;
@@ -304,7 +307,7 @@ bool StandXClient::placeOrder(Order& order) {
   extra_headers["x-request-signature"] = signature;
 
   try {
-    std::string response =
+    response =
         http_->post_json_with_auth(url, body, access_token_, extra_headers);
 
     auto json_response = nlohmann::json::parse(response);
@@ -316,8 +319,10 @@ bool StandXClient::placeOrder(Order& order) {
       }
     }
   } catch (const std::exception& e) {
-    ERROR("Failed to place order: " << e.what());
+    ERROR("Failed to place order: " << e.what() << ", response: " << response);
   }
+
+  NOTICE("Failed to place order, response: " << response);
   return false;
 }
 
@@ -366,6 +371,7 @@ bool StandXClient::tpOrder(Order& order) {
   std::string version = "v1";
   std::string message =
       version + "," + request_id + "," + timestamp + "," + body;
+  std::string response;
 
   std::string signature = auth_->sign_ed25519_base64(message);
   std::map<std::string, std::string> extra_headers;
@@ -375,7 +381,7 @@ bool StandXClient::tpOrder(Order& order) {
   extra_headers["x-request-signature"] = signature;
 
   try {
-    std::string response =
+    response =
         http_->post_json_with_auth(url, body, access_token_, extra_headers);
 
     auto json_response = nlohmann::json::parse(response);
@@ -389,6 +395,8 @@ bool StandXClient::tpOrder(Order& order) {
   } catch (const std::exception& e) {
     ERROR("Failed to place TP order: " << e.what());
   }
+
+  NOTICE("Failed to place TP order, response: " << response);
   return false;
 }
 
