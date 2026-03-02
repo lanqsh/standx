@@ -36,7 +36,7 @@ class StandXClient {
 
   bool tpOrder(Order& order);
 
-  void cancelOrder(const std::string& id);
+  void cancelOrder(const std::string& cl_ord_id);
 
   std::string get_access_token() const { return access_token_; }
 

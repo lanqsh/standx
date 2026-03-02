@@ -110,6 +110,23 @@ std::string safeFtos(float value, int places) {
   return oss.str();
 }
 
+std::string BuildClOrdId(const std::string& inst_id, float price) {
+  auto pos = inst_id.find('-');
+  std::string symbol =
+      (pos == std::string::npos) ? inst_id : inst_id.substr(0, pos);
+
+  auto now = std::chrono::system_clock::now();
+  std::time_t now_time = std::chrono::system_clock::to_time_t(now);
+  std::tm tm = {};
+  localtime_r(&now_time, &tm);
+
+  std::ostringstream ts;
+  ts << std::put_time(&tm, "%Y%m%d%H%M%S");
+
+  return symbol + "_" + safeFtos(price, PRICE_ACCURACY_INT) + "_" +
+         ts.str();
+}
+
 bool areFloatsEqual(float a, float b, float epsilon) {
   return std::fabs(a - b) < epsilon;
 }

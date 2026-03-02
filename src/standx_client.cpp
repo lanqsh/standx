@@ -124,8 +124,8 @@ bool StandXClient::positions(std::vector<Position>& positions_list) {
 }
 
 bool StandXClient::detail(Order& order) {
-  if (order.id.empty()) {
-    ERROR("Order ID is empty");
+  if (order.cl_ord_id.empty()) {
+    ERROR("Order cl_ord_id is empty");
     order.status = "FAILED";
     return true;
   }
@@ -133,12 +133,8 @@ bool StandXClient::detail(Order& order) {
     throw std::runtime_error("not logged in, call login() first");
   }
 
-  if (order.id.empty()) {
-    ERROR("Order id is required for detail query");
-    return false;
-  }
-
-  std::string url = api_base_url_ + "/api/query_order?order_id=" + order.id;
+  std::string url =
+      api_base_url_ + "/api/query_order?cl_ord_id=" + order.cl_ord_id;
   std::string response;
   try {
     response = request_with_retry(url);
@@ -176,10 +172,6 @@ bool StandXClient::unfilledOrders(std::list<Order>& order_list) {
       for (const auto& item : json["result"]) {
         Order order;
 
-        if (item.contains("id") && item["id"].is_number()) {
-          order.id = std::to_string(item["id"].get<long long>());
-        }
-
         if (item.contains("side") && item["side"].is_string()) {
           std::string side = item["side"].get<std::string>();
           std::transform(side.begin(), side.end(), side.begin(), ::toupper);
@@ -196,6 +188,10 @@ bool StandXClient::unfilledOrders(std::list<Order>& order_list) {
 
         if (item.contains("reduce_only") && item["reduce_only"].is_boolean()) {
           order.is_reduce_only = item["reduce_only"].get<bool>();
+        }
+
+        if (item.contains("cl_ord_id") && item["cl_ord_id"].is_string()) {
+          order.cl_ord_id = item["cl_ord_id"].get<std::string>();
         }
 
         if (item.contains("status") && item["status"].is_string()) {
@@ -266,6 +262,12 @@ bool StandXClient::placeOrder(Order& order) {
   order_json["order_type"] = type;
   order_json["qty"] = std::to_string(order.size);
   order_json["reduce_only"] = order.is_reduce_only;
+
+  if (order.cl_ord_id.empty()) {
+    ERROR("placeOrder requires non-empty cl_ord_id");
+    return false;
+  }
+  order_json["cl_ord_id"] = order.cl_ord_id;
 
   if (type == "market") {
     order_json["time_in_force"] = "ioc";
@@ -343,6 +345,12 @@ bool StandXClient::tpOrder(Order& order) {
   order_json["order_type"] = type;
   order_json["qty"] = std::to_string(order.size);
 
+  if (order.tp_cl_ord_id.empty()) {
+    ERROR("tpOrder requires non-empty tp_cl_ord_id");
+    return false;
+  }
+  order_json["cl_ord_id"] = order.tp_cl_ord_id;
+
   order_json["time_in_force"] = "alo";
   order_json["reduce_only"] = true;
   order_json["price"] = safeFtos(order.tp_price, PRICE_ACCURACY_INT);
@@ -400,24 +408,18 @@ bool StandXClient::tpOrder(Order& order) {
   return false;
 }
 
-void StandXClient::cancelOrder(const std::string& id) {
+void StandXClient::cancelOrder(const std::string& cl_ord_id) {
   if (access_token_.empty()) {
     throw std::runtime_error("not logged in, call login() first");
   }
 
-  if (id.empty()) {
-    ERROR("Order id is required for cancel");
+  if (cl_ord_id.empty()) {
+    ERROR("Order cl_ord_id is required for cancel");
     return;
   }
 
   nlohmann::json cancel_req;
-  try {
-    long long oid = std::stoll(id);
-    cancel_req["order_id"] = oid;
-  } catch (const std::exception& e) {
-    ERROR("Invalid order id for cancel: " << id << ": " << e.what());
-    return;
-  }
+  cancel_req["cl_ord_id"] = cl_ord_id;
 
   std::string url = api_base_url_ + "/api/cancel_order";
   std::string body = cancel_req.dump();
@@ -455,7 +457,7 @@ void StandXClient::cancelOrder(const std::string& id) {
   try {
     http_->post_json_with_auth(url, body, access_token_, extra_headers);
   } catch (const std::exception& e) {
-    ERROR("Failed to cancel order " << id << ": " << e.what());
+    ERROR("Failed to cancel order " << cl_ord_id << ": " << e.what());
   }
 }
 

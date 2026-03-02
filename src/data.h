@@ -48,6 +48,8 @@ struct Order {
 
   std::string contract;
   std::string id;
+  std::string cl_ord_id;
+  std::string tp_cl_ord_id;
   std::string tpId;
   std::string slId;
   std::string side;
