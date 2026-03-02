@@ -54,6 +54,8 @@ float safeStof(const std::string& str);
 
 std::string safeFtos(float value, int places);
 
+std::string BuildClOrdId(const std::string& inst_id, float price);
+
 bool areFloatsEqual(float a, float b, float epsilon = 1e-6);
 
 std::string adjustDecimalPlaces(float num, const std::string& epsilon);

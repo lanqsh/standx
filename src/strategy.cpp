@@ -22,6 +22,7 @@ using standx::StandXClient;
 static int s_win_cnt = 0;
 static int s_lose_cnt = 0;
 static float s_pnl = 0.0;
+
 Strategy::Strategy(std::shared_ptr<StandXClient> client) : client_(client) {
   Init();
 }
@@ -167,9 +168,9 @@ void Strategy::CheckFilledLongOrders() {
     if (order.status == "FILLED_OPEN_IMMEDIATE") {
       tp = true;
     } else if (client_->detail(order)) {
-      INFO("Check Filled place order: " << order.price << ", key: " << it->first
-                                        << ", order.id: " << order.id
-                                        << ", status: " << order.status);
+      INFO("Check Filled place order: "
+           << order.price << ", key: " << it->first << ", order.cl_ord_id: "
+           << order.cl_ord_id << ", status: " << order.status);
       if (order.status == "FILLED") {
         tp = true;
         NOTICE("TRADE long place order FILLED: " << it->first
@@ -187,7 +188,8 @@ void Strategy::CheckFilledLongOrders() {
         order.status = "IDLE";
         break;
       } else {
-        ERROR("place order failed: " << it->first << ", id: " << order.id
+        ERROR("place order failed: " << it->first
+                                     << ", cl_ord_id: " << order.cl_ord_id
                                      << ", status: " << order.status);
         break;
       }
@@ -202,6 +204,7 @@ void Strategy::CheckFilledLongOrders() {
       order.side = "SELL";
       order.positionSide = "LONG";
       order.type = "LIMIT";
+      order.tp_cl_ord_id = BuildClOrdId(instId_, tp_price);
       for (int i = 0; i < try_count; ++i) {
         if (!client_->tpOrder(order)) {
           SLEEP_MS(1000);
@@ -225,13 +228,13 @@ void Strategy::CheckFilledLongOrders() {
     }
 
     Order tmp = it->second;
-    tmp.id = tmp.tpId;
+    tmp.cl_ord_id = tmp.tp_cl_ord_id;
     bool tp = false;
     if (order.status == "FILLED_CLOSE_IMMEDIATE") {
       tp = true;
     } else if (client_->detail(tmp)) {
       INFO("Check Filled tp order: " << tmp.price << ", key: " << it->first
-                                     << ", tmp.id: " << tmp.id
+                                     << ", tmp.cl_ord_id: " << tmp.cl_ord_id
                                      << ", status: " << tmp.status);
       if (tmp.status == "FILLED") {
         tp = true;
@@ -248,15 +251,17 @@ void Strategy::CheckFilledLongOrders() {
           order.side = "SELL";
           order.positionSide = "LONG";
           order.type = "LIMIT";
+          order.tp_cl_ord_id = BuildClOrdId(instId_, tp_price);
           if (!client_->tpOrder(order)) {
             NOTICE("Failed to update long TP order for " << it->first);
             continue;
           } else {
-            client_->cancelOrder(tmp.id);
+            client_->cancelOrder(tmp.cl_ord_id);
             SyncTpOrderId(order);
             NOTICE("Updating long TP order ok for "
                    << it->first << " price: " << tmp.tp_price << " " << tp_price
-                   << " id: " << tmp.id << " " << order.tpId);
+                   << " cl_ord_id: " << tmp.cl_ord_id << " "
+                   << order.tp_cl_ord_id);
           }
         }
         break;
@@ -266,7 +271,8 @@ void Strategy::CheckFilledLongOrders() {
         order.status = "IDLE";
         break;
       } else {
-        ERROR("tp order failed: " << it->first << ", id: " << tmp.id
+        ERROR("tp order failed: " << it->first
+                                  << ", cl_ord_id: " << tmp.cl_ord_id
                                   << ", status: " << tmp.status);
         break;
       }
@@ -297,9 +303,9 @@ void Strategy::CheckFilledShortOrders() {
     if (order.status == "FILLED_OPEN_IMMEDIATE") {
       tp = true;
     } else if (client_->detail(order)) {
-      INFO("Check Filled place order: " << order.price << ", key: " << it->first
-                                        << ", order.id: " << order.id
-                                        << ", status: " << order.status);
+      INFO("Check Filled place order: "
+           << order.price << ", key: " << it->first << ", order.cl_ord_id: "
+           << order.cl_ord_id << ", status: " << order.status);
       if (order.status == "FILLED") {
         NOTICE("TRADE short place order FILLED: " << it->first << ", price: "
                                                   << order.price);
@@ -316,7 +322,8 @@ void Strategy::CheckFilledShortOrders() {
         order.status = "IDLE";
         break;
       } else {
-        ERROR("place order failed: " << it->first << ", id: " << order.id
+        ERROR("place order failed: " << it->first
+                                     << ", cl_ord_id: " << order.cl_ord_id
                                      << ", status: " << order.status);
         break;
       }
@@ -331,6 +338,7 @@ void Strategy::CheckFilledShortOrders() {
       order.side = "BUY";
       order.positionSide = "SHORT";
       order.type = "LIMIT";
+      order.tp_cl_ord_id = BuildClOrdId(instId_, tp_price);
       for (int i = 0; i < try_count; ++i) {
         if (!client_->tpOrder(order)) {
           SLEEP_MS(1000);
@@ -354,13 +362,13 @@ void Strategy::CheckFilledShortOrders() {
     }
 
     Order tmp = it->second;
-    tmp.id = tmp.tpId;
+    tmp.cl_ord_id = tmp.tp_cl_ord_id;
     bool tp = false;
     if (order.status == "FILLED_CLOSE_IMMEDIATE") {
       tp = true;
     } else if (client_->detail(tmp)) {
       INFO("Check Filled tp order: " << tmp.price << ", key: " << it->first
-                                     << ", tmp.id: " << tmp.id
+                                     << ", tmp.cl_ord_id: " << tmp.cl_ord_id
                                      << ", status: " << tmp.status);
       if (tmp.status == "FILLED") {
         tp = true;
@@ -378,15 +386,17 @@ void Strategy::CheckFilledShortOrders() {
           order.side = "BUY";
           order.positionSide = "SHORT";
           order.type = "LIMIT";
+          order.tp_cl_ord_id = BuildClOrdId(instId_, tp_price);
           if (!client_->tpOrder(order)) {
             NOTICE("Failed to place TP order for " << it->first);
             continue;
           } else {
-            client_->cancelOrder(tmp.id);
+            client_->cancelOrder(tmp.cl_ord_id);
             SyncTpOrderId(order);
             NOTICE("Updating short TP order ok for "
                    << it->first << " price: " << tmp.tp_price << " " << tp_price
-                   << " id: " << tmp.id << " " << order.tpId);
+                   << " cl_ord_id: " << tmp.cl_ord_id << " "
+                   << order.tp_cl_ord_id);
           }
         }
         break;
@@ -396,7 +406,8 @@ void Strategy::CheckFilledShortOrders() {
         order.status = "IDLE";
         break;
       } else {
-        ERROR("tp order failed: " << it->first << ", id: " << tmp.id
+        ERROR("tp order failed: " << it->first
+                                  << ", cl_ord_id: " << tmp.cl_ord_id
                                   << ", status: " << tmp.status);
         break;
       }
@@ -437,7 +448,7 @@ void Strategy::DeleteLongTpOrders() {
     if (order.is_reduce_only && order.size == grid_size_ &&
         order.price >
             current_fix_long_price_ + order_interval_ * ORDER_NUM * 2) {
-      client_->cancelOrder(order.id);
+      client_->cancelOrder(order.cl_ord_id);
       it = unfilled_orders_.erase(it);
     } else {
       ++it;
@@ -451,7 +462,7 @@ void Strategy::DeleteLongPlaceOrders() {
     if (!order.is_reduce_only && order.size == grid_size_ &&
         order.price <
             current_fix_long_price_ - order_interval_ * ORDER_NUM * 2) {
-      client_->cancelOrder(order.id);
+      client_->cancelOrder(order.cl_ord_id);
       auto price_str = adjustDecimalPlaces(order.price, order_price_round_);
       auto itr = long_grid_order_list_.find(price_str);
       if (itr != long_grid_order_list_.end()) {
@@ -470,7 +481,7 @@ void Strategy::DeleteShortTpOrders() {
     if (order.is_reduce_only && order.size == grid_size_ &&
         order.price <
             current_fix_short_price_ - order_interval_ * ORDER_NUM * 2) {
-      client_->cancelOrder(order.id);
+      client_->cancelOrder(order.cl_ord_id);
       it = unfilled_orders_.erase(it);
     } else {
       ++it;
@@ -484,7 +495,7 @@ void Strategy::DeleteShortPlaceOrders() {
     if (!order.is_reduce_only && order.size == grid_size_ &&
         order.price >
             current_fix_short_price_ + order_interval_ * ORDER_NUM * 2) {
-      client_->cancelOrder(order.id);
+      client_->cancelOrder(order.cl_ord_id);
       auto price_str = adjustDecimalPlaces(order.price, order_price_round_);
       auto itr = short_grid_order_list_.find(price_str);
       if (itr != short_grid_order_list_.end()) {
@@ -556,7 +567,7 @@ void Strategy::InitLongTpOrders() {
         NOTICE("Init tp long order not in grid list, price: "
                << order.price << ", price_str: " << price_str);
         order.status = "FILLED";
-        order.tpId = order.id;
+        order.tp_cl_ord_id = order.cl_ord_id;
         order.tp_price = order.price;
         order.price = 0;
         long_grid_order_list_[price_str] = order;
@@ -575,7 +586,7 @@ void Strategy::InitShortTpOrders() {
         NOTICE("Init tp short order not in grid list, price: "
                << order.price << ", price_str: " << price_str);
         order.status = "FILLED";
-        order.tpId = order.id;
+        order.tp_cl_ord_id = order.cl_ord_id;
         order.tp_price = order.price;
         order.price = 0;
         short_grid_order_list_[price_str] = order;
@@ -619,12 +630,14 @@ void Strategy::MakeLongPlaceOrders() {
       order.price = place_price;
       order.size = grid_size_;
       order.status = "NEW";
+      order.cl_ord_id = BuildClOrdId(instId_, place_price);
       if (client_->placeOrder(order)) {
         SyncPlacedOrderId(order);
         long_grid_order_list_[place_price_str] = order;
         NOTICE("TRADE Place Long Order: "
-               << order.contract << " " << order.id << ", size: " << order.size
-               << ", key: " << place_price_str << ", price: " << order.price
+               << order.contract << " " << order.cl_ord_id
+               << ", size: " << order.size << ", key: " << place_price_str
+               << ", price: " << order.price
                << ", current_price_: " << current_price_);
       } else {
         NOTICE("Failed to place long order");
@@ -669,11 +682,12 @@ void Strategy::MakeShortPlaceOrders() {
       order.price = place_price;
       order.size = grid_size_;
       order.status = "NEW";
+      order.cl_ord_id = BuildClOrdId(instId_, place_price);
       if (client_->placeOrder(order)) {
         SyncPlacedOrderId(order);
         short_grid_order_list_[place_price_str] = order;
         NOTICE("TRADE Place Short Order: "
-               << order.id << ", size: " << order.size
+               << order.cl_ord_id << ", size: " << order.size
                << ", key: " << place_price_str << ", price: " << order.price
                << ", current_price_: " << current_price_);
       } else {
@@ -688,20 +702,19 @@ void Strategy::SyncPlacedOrderId(Order& order) {
     SLEEP_MS(1000);
     CheckUnfilledOrders();
     for (auto& u : unfilled_orders_) {
-      if (u.side == order.side && u.status == "NEW" &&
-          areFloatsEqual(u.price, order.price, PRICE_ACCURACY_FLOAT)) {
-        order.id = u.id;
+      if (!u.cl_ord_id.empty() && u.cl_ord_id == order.cl_ord_id) {
         order.status = "NEW";
-        NOTICE("sync placed order price " << order.price
-                                          << ", status: " << order.status
-                                          << ", id: " << order.id);
+        NOTICE("sync placed order price "
+               << order.price << ", status: " << order.status
+               << ", cl_ord_id: " << order.cl_ord_id);
         return;
       }
     }
   }
   order.status = "FILLED_OPEN_IMMEDIATE";
-  NOTICE("sync placed order price " << order.price << ", status: "
-                                    << order.status << ", id: " << order.id);
+  NOTICE("sync placed order price " << order.price
+                                    << ", status: " << order.status
+                                    << ", cl_ord_id: " << order.cl_ord_id);
 }
 
 void Strategy::SyncTpOrderId(Order& order) {
@@ -709,20 +722,21 @@ void Strategy::SyncTpOrderId(Order& order) {
     SLEEP_MS(1000);
     CheckUnfilledOrders();
     for (auto& u : unfilled_orders_) {
-      if (u.is_reduce_only && u.positionSide == order.positionSide &&
-          areFloatsEqual(u.price, order.tp_price, PRICE_ACCURACY_FLOAT)) {
-        order.tpId = u.id;
+      if (!u.cl_ord_id.empty() && u.cl_ord_id == order.tp_cl_ord_id) {
+        order.tp_cl_ord_id = u.cl_ord_id;
         order.status = "FILLED_CLOSE_WAIT";
         NOTICE("sync TP order tp_price " << order.tp_price
                                          << ", status: " << order.status
-                                         << ", tpId: " << order.tpId);
+                                         << ", tpClOrdId: "
+                                         << order.tp_cl_ord_id);
         return;
       }
     }
   }
   order.status = "FILLED_CLOSE_IMMEDIATE";
   NOTICE("sync TP order tp_price " << order.tp_price << ", status: "
-                                   << order.status << ", tpId: " << order.tpId);
+                                   << order.status
+                                   << ", tpClOrdId: " << order.tp_cl_ord_id);
 }
 
 void Strategy::MakeLongTpOrders() {
@@ -752,6 +766,7 @@ void Strategy::MakeLongTpOrders() {
     order.side = "SELL";
     order.positionSide = "LONG";
     order.type = "LIMIT";
+    order.tp_cl_ord_id = BuildClOrdId(instId_, tp_price);
     order.tp_price = tp_price;
     order.size = grid_size_;
 
@@ -760,12 +775,13 @@ void Strategy::MakeLongTpOrders() {
       SyncTpOrderId(order);
       long_reduce_size_ += grid_size_;
       if (it != long_grid_order_list_.end()) {
-        it->second.tpId = order.tpId;
+        it->second.tp_cl_ord_id = order.tp_cl_ord_id;
       } else {
         long_grid_order_list_[tp_price_str] = order;
       }
 
-      NOTICE("TRADE Place TP order: " << order.contract << " " << order.tpId
+      NOTICE("TRADE Place TP order: " << order.contract << " "
+                                      << order.tp_cl_ord_id
                                       << " " << tp_price_str << " "
                                       << order.tp_price);
     } else {
@@ -801,6 +817,7 @@ void Strategy::MakeShortTpOrders() {
     order.side = "BUY";
     order.positionSide = "SHORT";
     order.type = "LIMIT";
+    order.tp_cl_ord_id = BuildClOrdId(instId_, tp_price);
     order.tp_price = tp_price;
     order.size = grid_size_;
 
@@ -809,12 +826,13 @@ void Strategy::MakeShortTpOrders() {
       SyncTpOrderId(order);
       short_reduce_size_ += grid_size_;
       if (it != short_grid_order_list_.end()) {
-        it->second.tpId = order.tpId;
+        it->second.tp_cl_ord_id = order.tp_cl_ord_id;
       } else {
         short_grid_order_list_[tp_price_str] = order;
       }
 
-      NOTICE("TRADE Place TP order: " << order.contract << " " << order.tpId
+      NOTICE("TRADE Place TP order: " << order.contract << " "
+                                      << order.tp_cl_ord_id
                                       << ", size: " << order.size
                                       << ", price: " << order.tp_price);
     } else {
@@ -831,6 +849,7 @@ void Strategy::IncreaseLongPosition() {
     order.type = "MARKET";
     order.price = 0;
     order.size = grid_size_ * ORDER_NUM;
+    order.cl_ord_id = BuildClOrdId(instId_, current_price_);
     client_->placeOrder(order);
     NOTICE("Increase long position at " << current_price_);
     SLEEP_MS(1000);
@@ -846,6 +865,7 @@ void Strategy::IncreaseShortPosition() {
     order.type = "MARKET";
     order.price = 0;
     order.size = grid_size_ * ORDER_NUM;
+    order.cl_ord_id = BuildClOrdId(instId_, current_price_);
     client_->placeOrder(order);
     NOTICE("Increase short position at " << current_price_);
     SLEEP_MS(1000);
