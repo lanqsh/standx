@@ -1,5 +1,5 @@
-#ifndef _UTIL_H
-#define _UTIL_H
+#ifndef STANDX_SRC_UTIL_H_
+#define STANDX_SRC_UTIL_H_
 
 #include <cstdint>
 #include <string>
@@ -42,26 +42,18 @@ typename std::enable_if<std::is_enum<T>::value, std::ostream&>::type operator<<(
   return os << static_cast<typename std::underlying_type<T>::type>(value);
 }
 
-std::string generateSignature(const std::string& key, const std::string& data);
+float SafeStof(const std::string& str);
 
-std::string getTimestamp();
-
-uint64_t safeStoll(const std::string& str);
-
-int safeStoi(const std::string& str);
-
-float safeStof(const std::string& str);
-
-std::string safeFtos(float value, int places);
+std::string SafeFtos(float value, int places);
 
 std::string BuildClOrdId(const std::string& inst_id, float price);
 
-bool areFloatsEqual(float a, float b, float epsilon = 1e-6);
+bool AreFloatsEqual(float a, float b, float epsilon = 1e-6);
 
-std::string adjustDecimalPlaces(float num, const std::string& epsilon);
+std::string AdjustDecimalPlaces(float num, const std::string& epsilon);
 
-std::string convertRemark(const std::string& remark);
+std::string ConvertRemark(const std::string& remark);
 
-void sendMessage(const std::string& message, bool force = false);
+void SendMessage(const std::string& message, bool force = false);
 
-#endif
+#endif  // STANDX_SRC_UTIL_H_

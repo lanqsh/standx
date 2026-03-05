@@ -66,10 +66,10 @@ bool StandXClient::balance(float& availBal, float& totalBal) {
 
     if (json.contains("cross_available") &&
         json["cross_available"].is_string()) {
-      availBal = safeStof(json["cross_available"].get<std::string>());
+      availBal = SafeStof(json["cross_available"].get<std::string>());
     }
     if (json.contains("cross_balance") && json["cross_balance"].is_string()) {
-      totalBal = safeStof(json["cross_balance"].get<std::string>());
+      totalBal = SafeStof(json["cross_balance"].get<std::string>());
     }
 
     return true;
@@ -101,7 +101,7 @@ bool StandXClient::positions(std::vector<Position>& positions_list) {
 
         float qty = 0.0f;
         if (item.contains("qty") && item["qty"].is_string()) {
-          qty = safeStof(item["qty"].get<std::string>());
+          qty = SafeStof(item["qty"].get<std::string>());
         }
 
         if (qty < 0) {
@@ -179,11 +179,11 @@ bool StandXClient::unfilledOrders(std::list<Order>& order_list) {
         }
 
         if (item.contains("qty") && item["qty"].is_string()) {
-          order.size = safeStof(item["qty"].get<std::string>());
+          order.size = SafeStof(item["qty"].get<std::string>());
         }
 
         if (item.contains("price") && item["price"].is_string()) {
-          order.price = safeStof(item["price"].get<std::string>());
+          order.price = SafeStof(item["price"].get<std::string>());
         }
 
         if (item.contains("reduce_only") && item["reduce_only"].is_boolean()) {
@@ -233,7 +233,7 @@ bool StandXClient::tickers(Ticker& tk) {
     auto json = nlohmann::json::parse(response);
 
     if (json.contains("last_price") && json["last_price"].is_string()) {
-      tk.last = safeStof(json["last_price"]);
+      tk.last = SafeStof(json["last_price"]);
       return true;
     }
 
@@ -273,7 +273,7 @@ bool StandXClient::placeOrder(Order& order) {
     order_json["time_in_force"] = "ioc";
   } else {
     order_json["time_in_force"] = "alo";
-    order_json["price"] = safeFtos(order.price, PRICE_ACCURACY_INT);
+    order_json["price"] = SafeFtos(order.price, PRICE_ACCURACY_INT);
   }
 
   std::string url = api_base_url_ + "/api/new_order";
@@ -353,7 +353,7 @@ bool StandXClient::tpOrder(Order& order) {
 
   order_json["time_in_force"] = "alo";
   order_json["reduce_only"] = true;
-  order_json["price"] = safeFtos(order.tp_price, PRICE_ACCURACY_INT);
+  order_json["price"] = SafeFtos(order.tp_price, PRICE_ACCURACY_INT);
 
   std::string url = api_base_url_ + "/api/new_order";
   std::string body = order_json.dump();

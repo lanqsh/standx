@@ -1,23 +1,14 @@
 #include "util.h"
 
-#include <openssl/buffer.h>
-#include <openssl/err.h>
-#include <openssl/evp.h>
-#include <openssl/hmac.h>
-#include <openssl/sha.h>
-#include <openssl/ssl.h>
-
 #include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <iomanip>
 #include <iostream>
-#include <limits>
-#include <numeric>
-#include <vector>
+#include <map>
+#include <sstream>
+#include <string>
 
-#include "Poco/LocalDateTime.h"
-#include "Poco/Thread.h"
 #include "tracer.h"
 
 namespace {
@@ -29,81 +20,19 @@ std::map<char, std::string> kEscapingMap = {
     {'*', "\\*"}, {'$', "\\$"}, {'[', "%5B"},  {']', "%5D"}, {'^', "%5E"},
     {'{', "%7B"}, {'}', "%7D"}, {'~', "%7E"}};
 }
-std::string hexEncode(const unsigned char* data, size_t length) {
-  std::ostringstream hexStream;
-  for (size_t i = 0; i < length; ++i) {
-    hexStream << std::hex << std::setw(2) << std::setfill('0') << (int)data[i];
-  }
-  return hexStream.str();
-}
 
-std::string sha512(const std::string& input) {
-  unsigned char hash[SHA512_DIGEST_LENGTH];
-  SHA512(reinterpret_cast<const unsigned char*>(input.c_str()), input.size(),
-         hash);
-  return hexEncode(hash, SHA512_DIGEST_LENGTH);
-}
-
-std::string generateSignature(const std::string& key, const std::string& data) {
-  unsigned char digest[SHA256_DIGEST_LENGTH];
-  HMAC(EVP_sha256(), key.c_str(), key.length(), (unsigned char*)data.c_str(),
-       data.length(), digest, NULL);
-
-  std::stringstream ss;
-  for (int i = 0; i < SHA256_DIGEST_LENGTH; i++) {
-    ss << std::hex << std::setw(2) << std::setfill('0') << (int)digest[i];
-  }
-  return ss.str();
-}
-
-std::string getTimestamp() {
-  using namespace std::chrono;
-  auto now = system_clock::now();
-  auto now_seconds = system_clock::to_time_t(now);
-  std::tm tm = {};
-
-  localtime_r(&now_seconds, &tm);
-  auto now_ms = duration_cast<milliseconds>(now.time_since_epoch()) % 1000;
-
-  std::stringstream ss;
-  ss << std::put_time(&tm, "%Y-%m-%d %H:%M:%S");
-  return ss.str();
-}
-
-uint64_t safeStoll(const std::string& str) {
-  if (str.empty()) return 0;
-
-  try {
-    return std::stoull(str);
-  } catch (...) {
-    ERROR("safeStoi error: " << str);
-    return 0;
-  }
-}
-
-int safeStoi(const std::string& str) {
-  if (str.empty()) return 0;
-
-  try {
-    return std::stoi(str);
-  } catch (...) {
-    ERROR("safeStoi error: " << str);
-    return 0;
-  }
-}
-
-float safeStof(const std::string& str) {
+float SafeStof(const std::string& str) {
   if (str.empty()) return 0.0f;
 
   try {
     return std::stof(str);
   } catch (...) {
-    ERROR("safeStof error: " << str);
+    ERROR("SafeStof error: " << str);
     return 0.0f;
   }
 }
 
-std::string safeFtos(float value, int places) {
+std::string SafeFtos(float value, int places) {
   std::ostringstream oss;
   oss << std::fixed << std::setprecision(places);
   oss << value;
@@ -123,16 +52,15 @@ std::string BuildClOrdId(const std::string& inst_id, float price) {
   std::ostringstream ts;
   ts << std::put_time(&tm, "%Y%m%d%H%M%S");
 
-  return symbol + "_" + safeFtos(price, PRICE_ACCURACY_INT) + "_" +
-         ts.str();
+  return symbol + "_" + SafeFtos(price, PRICE_ACCURACY_INT) + "_" + ts.str();
 }
 
-bool areFloatsEqual(float a, float b, float epsilon) {
+bool AreFloatsEqual(float a, float b, float epsilon) {
   return std::fabs(a - b) < epsilon;
 }
 
-std::string adjustDecimalPlaces(float num, const std::string& epsilon) {
-  float epsilon_float = safeStof(epsilon);
+std::string AdjustDecimalPlaces(float num, const std::string& epsilon) {
+  float epsilon_float = SafeStof(epsilon);
   int precision = epsilon.size() - 2;
 
   num *= std::pow(10, precision);
@@ -150,21 +78,21 @@ std::string adjustDecimalPlaces(float num, const std::string& epsilon) {
   return oss.str();
 }
 
-std::string convertRemark(const std::string& remark) {
+std::string ConvertRemark(const std::string& remark) {
   std::string res;
-  for (int i = 0; i < remark.size(); ++i) {
+  for (size_t i = 0; i < remark.size(); ++i) {
     char c = remark.at(i);
     auto it = kEscapingMap.find(c);
     if (it != kEscapingMap.end()) {
-      res += kEscapingMap[c];
+      res += it->second;
     } else {
-      res += remark.at(i);
+      res += c;
     }
   }
   return res;
 }
 
-void sendMessage(const std::string& message, bool force) {
+void SendMessage(const std::string& message, bool force) {
   if (kConfig.barkServer.empty()) {
     return;
   }
@@ -179,7 +107,7 @@ void sendMessage(const std::string& message, bool force) {
     ring = "";
   }
 
-  std::string cmd = convertRemark(message);
+  std::string cmd = ConvertRemark(message);
   cmd = endpoint + cmd + ring;
   int result = system(cmd.c_str());
   (void)result;

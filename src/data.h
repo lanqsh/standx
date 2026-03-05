@@ -1,18 +1,16 @@
-#ifndef _DATA_H
-#define _DATA_H
+#ifndef STANDX_SRC_DATA_H_
+#define STANDX_SRC_DATA_H_
 
 #include <cstdint>
+#include <string>
 
-#include "Poco/Timestamp.h"
 #include "defines.h"
 
 struct Config {
   float lever;
   float minAvailBal;
-  std::string blackList;
   std::string whiteList;
 
-  std::string apiKey;
   std::string secretKey;
   std::string chain;
 
@@ -40,25 +38,13 @@ struct Ticker {
 struct Order {
   bool is_reduce_only{false};
   float size{0.0};
-  float last_close_pnl;
   float price{0.0};
   float tp_price{0.0};
-  float sl_price{0.0};
-  int rule{0};
 
   std::string contract;
-  std::string id;
   std::string cl_ord_id;
   std::string tp_cl_ord_id;
-  std::string tpId;
-  std::string slId;
   std::string side;
-  std::string fill_price;
-  std::string auto_size;
-  std::string trigger_price;
-
-  std::string startTime;
-  std::string endTime;
   std::string status;  // NEW FILLED IDLE
 
   std::string positionSide;
@@ -70,14 +56,4 @@ struct Position {
   float positionAmt;
 };
 
-struct Contract {
-  int order_size_min;
-  std::string name;
-  std::string leverage_min;
-  std::string leverage_max;
-  std::string quanto_multiplier;
-  std::string mark_price;
-  std::string order_price_round;
-};
-
-#endif
+#endif  // STANDX_SRC_DATA_H_

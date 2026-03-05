@@ -38,10 +38,6 @@ class StandXClient {
 
   void cancelOrder(const std::string& cl_ord_id);
 
-  std::string get_access_token() const { return access_token_; }
-
-  AuthManager* get_auth_manager() const { return auth_.get(); }
-
   bool balance(float& availBal, float& totalBal);
 
  private:

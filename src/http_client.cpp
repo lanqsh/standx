@@ -156,13 +156,4 @@ std::string HttpClient::get_with_auth(const std::string& url,
   return perform_request(url, headers);
 }
 
-std::string HttpClient::delete_with_auth(const std::string& url,
-                                         const std::string& token) {
-  struct curl_slist* headers = nullptr;
-  std::string auth_header = "Authorization: Bearer " + token;
-  headers = curl_slist_append(headers, auth_header.c_str());
-  headers = curl_slist_append(headers, "Accept: application/json");
-  return perform_request(url, headers, "DELETE");
-}
-
 }  // namespace standx

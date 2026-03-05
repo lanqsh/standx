@@ -1,6 +1,4 @@
-#include <fstream>
 #include <iostream>
-#include <map>
 #include <memory>
 
 #include "Poco/AutoPtr.h"
@@ -14,12 +12,11 @@
 #include "util.h"
 
 Config kConfig;
-using Poco::AutoPtr;
-using Poco::NotFoundException;
-using Poco::Util::AbstractConfiguration;
-using Poco::Util::PropertyFileConfiguration;
 
 void InitConfig() {
+  using Poco::AutoPtr;
+  using Poco::NotFoundException;
+  using Poco::Util::PropertyFileConfiguration;
   try {
     Poco::File dir("log");
     if (!dir.exists()) {
@@ -66,7 +63,7 @@ int main() {
   auto strategy = std::make_shared<Strategy>(client);
   strategy->start();
 
-  while (1) {
+  while (true) {
     SLEEP_MS(1000);
   }
 

@@ -1,5 +1,5 @@
-#ifndef _DEFINES_H
-#define _DEFINES_H
+#ifndef STANDX_SRC_DEFINES_H_
+#define STANDX_SRC_DEFINES_H_
 
 #define DEFAULT_CONTRACT_SIZE 0.01
 #define ORDER_NUM 10
@@ -7,4 +7,4 @@
 #define PRICE_ACCURACY_INT 2
 #define PRICE_ACCURACY_FLOAT 0.01
 
-#endif
+#endif  // STANDX_SRC_DEFINES_H_

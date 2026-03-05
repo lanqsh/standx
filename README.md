@@ -30,6 +30,21 @@ A C++17 trading client for [StandX](https://standx.com) perpetual trading, inclu
 - Poco (Foundation, Util, Net, Data)
 - nlohmann/json (header-only)
 
+### 📦 Install Dependencies (Ubuntu/Debian)
+
+```bash
+sudo apt update
+sudo apt install -y \
+    build-essential \
+    cmake \
+    libssl-dev \
+    libsodium-dev \
+    libsecp256k1-dev \
+    libcurl4-openssl-dev \
+    nlohmann-json3-dev \
+    libpoco-dev
+```
+
 ### ⚙️ Configuration
 
 Use `config.properties` in project root.
@@ -176,6 +191,21 @@ MIT
 - libcurl
 - Poco（Foundation / Util / Net / Data）
 - nlohmann/json（头文件）
+
+### 📦 安装依赖（Ubuntu/Debian）
+
+```bash
+sudo apt update
+sudo apt install -y \
+    build-essential \
+    cmake \
+    libssl-dev \
+    libsodium-dev \
+    libsecp256k1-dev \
+    libcurl4-openssl-dev \
+    nlohmann-json3-dev \
+    libpoco-dev
+```
 
 ### ⚙️ 配置说明
 
