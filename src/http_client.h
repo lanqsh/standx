@@ -29,9 +29,6 @@ public:
     // GET request with authorization header
     std::string get_with_auth(const std::string& url, const std::string& token);
 
-    // DELETE request with authorization header
-    std::string delete_with_auth(const std::string& url, const std::string& token);
-
     // Get last HTTP response code
     long get_last_response_code() const;
 

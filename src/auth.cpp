@@ -5,11 +5,6 @@
 #include <secp256k1_recovery.h>
 #include <sodium.h>
 #include <nlohmann/json.hpp>
-#include <openssl/evp.h>
-#include <openssl/ec.h>
-#include <openssl/bn.h>
-#include <openssl/ecdsa.h>
-#include <openssl/sha.h>
 #include <stdexcept>
 #include <cstring>
 
@@ -157,78 +152,6 @@ std::string AuthManager::sign_message(const std::string& message) {
     memcpy(outsig, sig64, 64);
     outsig[64] = (unsigned char)(recid + 27);
     return "0x" + bytes_to_hex(outsig, 65);
-}
-
-std::string AuthManager::sign_message_base64(const std::string& message) {
-    if (private_key_bytes_.empty()) {
-        throw std::runtime_error("private key not set");
-    }
-
-    std::string prefix;
-    prefix.push_back((char)0x19);
-    prefix += "Ethereum Signed Message:\n" + std::to_string(message.size());
-    std::string prefixed = prefix + message;
-
-    unsigned char msghash[32];
-    keccak256((const unsigned char*)prefixed.data(), prefixed.size(), msghash);
-
-    secp256k1_ecdsa_recoverable_signature sig;
-    if (!secp256k1_ecdsa_sign_recoverable(impl_->ctx, &sig, msghash, private_key_bytes_.data(), NULL, NULL)) {
-        throw std::runtime_error("secp256k1 sign failed");
-    }
-
-    unsigned char sig64[64];
-    int recid = 0;
-    secp256k1_ecdsa_recoverable_signature_serialize_compact(impl_->ctx, sig64, &recid, &sig);
-
-    unsigned char outsig[65];
-    memcpy(outsig, sig64, 64);
-    outsig[64] = (unsigned char)(recid + 27);
-
-    return base64_encode(outsig, 65);
-}
-
-std::string AuthManager::sign_hash_base64(const std::string& message) {
-    if (private_key_bytes_.empty()) {
-        throw std::runtime_error("private key not set");
-    }
-
-    unsigned char msghash[32];
-    keccak256((const unsigned char*)message.data(), message.size(), msghash);
-
-    secp256k1_ecdsa_recoverable_signature sig;
-    if (!secp256k1_ecdsa_sign_recoverable(impl_->ctx, &sig, msghash, private_key_bytes_.data(), NULL, NULL)) {
-        throw std::runtime_error("secp256k1 sign failed");
-    }
-
-    unsigned char sig64[64];
-    int recid = 0;
-    secp256k1_ecdsa_recoverable_signature_serialize_compact(impl_->ctx, sig64, &recid, &sig);
-
-    unsigned char outsig[65];
-    memcpy(outsig, sig64, 64);
-    outsig[64] = (unsigned char)(recid + 27);
-
-    return base64_encode(outsig, 65);
-}
-
-std::string AuthManager::sign_ecdsa_64_base64(const std::string& message) {
-    if (private_key_bytes_.empty()) {
-        throw std::runtime_error("private key not set");
-    }
-
-    unsigned char msghash[32];
-    keccak256((const unsigned char*)message.data(), message.size(), msghash);
-
-    secp256k1_ecdsa_signature sig;
-    if (!secp256k1_ecdsa_sign(impl_->ctx, &sig, msghash, private_key_bytes_.data(), NULL, NULL)) {
-        throw std::runtime_error("secp256k1 sign failed");
-    }
-
-    unsigned char sig64[64];
-    secp256k1_ecdsa_signature_serialize_compact(impl_->ctx, sig64, &sig);
-
-    return base64_encode(sig64, 64);
 }
 
 std::string AuthManager::sign_ed25519_base64(const std::string& message) {

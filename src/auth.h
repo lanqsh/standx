@@ -22,15 +22,6 @@ public:
     // Sign arbitrary message using EIP-191 personal_sign
     std::string sign_message(const std::string& message);
 
-    // Sign message and return base64 encoded signature (65 bytes: r+s+v)
-    std::string sign_message_base64(const std::string& message);
-
-    // Sign message hash directly (no EIP-191 prefix) and return base64
-    std::string sign_hash_base64(const std::string& message);
-
-    // Sign using standard ECDSA (64 bytes r+s, no recovery id) and return base64
-    std::string sign_ecdsa_64_base64(const std::string& message);
-
     // Sign using Ed25519 (libsodium) and return base64 - matches official API
     std::string sign_ed25519_base64(const std::string& message);
 

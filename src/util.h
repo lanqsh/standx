@@ -42,14 +42,6 @@ typename std::enable_if<std::is_enum<T>::value, std::ostream&>::type operator<<(
   return os << static_cast<typename std::underlying_type<T>::type>(value);
 }
 
-std::string generateSignature(const std::string& key, const std::string& data);
-
-std::string getTimestamp();
-
-uint64_t safeStoll(const std::string& str);
-
-int safeStoi(const std::string& str);
-
 float safeStof(const std::string& str);
 
 std::string safeFtos(float value, int places);

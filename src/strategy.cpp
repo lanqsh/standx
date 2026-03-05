@@ -19,9 +19,6 @@
 #include "util.h"
 
 using standx::StandXClient;
-static int s_win_cnt = 0;
-static int s_lose_cnt = 0;
-static float s_pnl = 0.0;
 
 Strategy::Strategy(std::shared_ptr<StandXClient> client) : client_(client) {
   Init();
