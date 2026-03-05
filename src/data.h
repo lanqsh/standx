@@ -1,9 +1,9 @@
-#ifndef _DATA_H
-#define _DATA_H
+#ifndef STANDX_SRC_DATA_H_
+#define STANDX_SRC_DATA_H_
 
 #include <cstdint>
+#include <string>
 
-#include "Poco/Timestamp.h"
 #include "defines.h"
 
 struct Config {
@@ -56,4 +56,4 @@ struct Position {
   float positionAmt;
 };
 
-#endif
+#endif  // STANDX_SRC_DATA_H_

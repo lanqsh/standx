@@ -20,7 +20,7 @@
 
 using standx::StandXClient;
 
-Strategy::Strategy(std::shared_ptr<StandXClient> client) : client_(client) {
+Strategy::Strategy(std::shared_ptr<standx::StandXClient> client) : client_(client) {
   Init();
 }
 
@@ -60,7 +60,7 @@ void Strategy::Init() {
 
 void Strategy::InitParameters() {
   instId_ = client_->getInstId();
-  order_price_round_ = safeFtos(PRICE_ACCURACY_FLOAT, PRICE_ACCURACY_INT);
+  order_price_round_ = SafeFtos(PRICE_ACCURACY_FLOAT, PRICE_ACCURACY_INT);
 
   grid_long_ = kConfig.gridLong;
   grid_short_ = kConfig.gridShort;
@@ -460,7 +460,7 @@ void Strategy::DeleteLongPlaceOrders() {
         order.price <
             current_fix_long_price_ - order_interval_ * ORDER_NUM * 2) {
       client_->cancelOrder(order.cl_ord_id);
-      auto price_str = adjustDecimalPlaces(order.price, order_price_round_);
+      auto price_str = AdjustDecimalPlaces(order.price, order_price_round_);
       auto itr = long_grid_order_list_.find(price_str);
       if (itr != long_grid_order_list_.end()) {
         itr->second.status = "IDLE";
@@ -493,7 +493,7 @@ void Strategy::DeleteShortPlaceOrders() {
         order.price >
             current_fix_short_price_ + order_interval_ * ORDER_NUM * 2) {
       client_->cancelOrder(order.cl_ord_id);
-      auto price_str = adjustDecimalPlaces(order.price, order_price_round_);
+      auto price_str = AdjustDecimalPlaces(order.price, order_price_round_);
       auto itr = short_grid_order_list_.find(price_str);
       if (itr != short_grid_order_list_.end()) {
         itr->second.status = "IDLE";
@@ -528,7 +528,7 @@ void Strategy::CountShortReduceSize() {
 void Strategy::InitLongPlaceOrders() {
   for (auto& order : unfilled_orders_) {
     if (!order.is_reduce_only && order.positionSide == "LONG") {
-      auto price_str = adjustDecimalPlaces(order.price, order_price_round_);
+      auto price_str = AdjustDecimalPlaces(order.price, order_price_round_);
       if (long_grid_order_list_.find(price_str) ==
           long_grid_order_list_.end()) {
         NOTICE("Init place long order not in grid list, price: "
@@ -542,7 +542,7 @@ void Strategy::InitLongPlaceOrders() {
 void Strategy::InitShortPlaceOrders() {
   for (auto& order : unfilled_orders_) {
     if (!order.is_reduce_only && order.positionSide == "SHORT") {
-      auto price_str = adjustDecimalPlaces(order.price + order_interval_,
+      auto price_str = AdjustDecimalPlaces(order.price + order_interval_,
                                            order_price_round_);
       if (short_grid_order_list_.find(price_str) ==
           short_grid_order_list_.end()) {
@@ -557,7 +557,7 @@ void Strategy::InitShortPlaceOrders() {
 void Strategy::InitLongTpOrders() {
   for (auto& order : unfilled_orders_) {
     if (order.is_reduce_only && order.positionSide == "LONG") {
-      auto price_str = adjustDecimalPlaces(order.price - order_interval_,
+      auto price_str = AdjustDecimalPlaces(order.price - order_interval_,
                                            order_price_round_);
       if (long_grid_order_list_.find(price_str) ==
           long_grid_order_list_.end()) {
@@ -576,7 +576,7 @@ void Strategy::InitLongTpOrders() {
 void Strategy::InitShortTpOrders() {
   for (auto& order : unfilled_orders_) {
     if (order.is_reduce_only && order.positionSide == "SHORT") {
-      auto price_str = adjustDecimalPlaces(order.price + order_interval_,
+      auto price_str = AdjustDecimalPlaces(order.price + order_interval_,
                                            order_price_round_);
       if (short_grid_order_list_.find(price_str) ==
           short_grid_order_list_.end()) {
@@ -595,14 +595,14 @@ void Strategy::InitShortTpOrders() {
 void Strategy::MakeLongPlaceOrders() {
   for (int i = 0; i < ORDER_NUM; ++i) {
     float place_price = current_fix_long_price_ - order_interval_ * (i);
-    auto place_price_str = adjustDecimalPlaces(place_price, order_price_round_);
+    auto place_price_str = AdjustDecimalPlaces(place_price, order_price_round_);
     if (current_price_ - place_price < order_interval_ * 0.5) continue;
 
     bool place_order_exists = std::any_of(
         unfilled_orders_.begin(), unfilled_orders_.end(),
         [&](const auto& order) {
           return !order.is_reduce_only && order.positionSide == "LONG" &&
-                 areFloatsEqual(order.price, place_price, PRICE_ACCURACY_FLOAT);
+                 AreFloatsEqual(order.price, place_price, PRICE_ACCURACY_FLOAT);
         });
 
     if (place_order_exists) {
@@ -646,14 +646,14 @@ void Strategy::MakeLongPlaceOrders() {
 void Strategy::MakeShortPlaceOrders() {
   for (int i = 0; i < ORDER_NUM; ++i) {
     float place_price = current_fix_long_price_ + order_interval_ * (i);
-    auto place_price_str = adjustDecimalPlaces(place_price, order_price_round_);
+    auto place_price_str = AdjustDecimalPlaces(place_price, order_price_round_);
     if (place_price - current_price_ < order_interval_ * 0.5) continue;
 
     bool place_order_exists = std::any_of(
         unfilled_orders_.begin(), unfilled_orders_.end(),
         [&](const auto& order) {
           return !order.is_reduce_only && order.positionSide == "SHORT" &&
-                 areFloatsEqual(order.price, place_price, PRICE_ACCURACY_FLOAT);
+                 AreFloatsEqual(order.price, place_price, PRICE_ACCURACY_FLOAT);
         });
 
     if (place_order_exists) {
@@ -746,13 +746,13 @@ void Strategy::MakeLongTpOrders() {
 
     float tp_price = current_fix_long_price_ + order_interval_ * (i + num);
     auto tp_price_str =
-        adjustDecimalPlaces(tp_price - order_interval_, order_price_round_);
+        AdjustDecimalPlaces(tp_price - order_interval_, order_price_round_);
 
     bool tp_order_exists = std::any_of(
         unfilled_orders_.begin(), unfilled_orders_.end(),
         [&](const auto& order) {
           return order.is_reduce_only && order.positionSide == "LONG" &&
-                 areFloatsEqual(order.price, tp_price, PRICE_ACCURACY_FLOAT);
+                 AreFloatsEqual(order.price, tp_price, PRICE_ACCURACY_FLOAT);
         });
 
     if (tp_order_exists) {
@@ -797,13 +797,13 @@ void Strategy::MakeShortTpOrders() {
 
     float tp_price = current_fix_short_price_ - order_interval_ * (i + num);
     auto tp_price_str =
-        adjustDecimalPlaces(tp_price + order_interval_, order_price_round_);
+        AdjustDecimalPlaces(tp_price + order_interval_, order_price_round_);
 
     bool tp_order_exists = std::any_of(
         unfilled_orders_.begin(), unfilled_orders_.end(),
         [&](const auto& order) {
           return order.is_reduce_only && order.positionSide == "SHORT" &&
-                 areFloatsEqual(order.price, tp_price, PRICE_ACCURACY_FLOAT);
+                 AreFloatsEqual(order.price, tp_price, PRICE_ACCURACY_FLOAT);
         });
 
     if (tp_order_exists) {
@@ -881,7 +881,7 @@ void Strategy::ResetDailyCounters() {
     msg += ", balance " + std::to_string(availBal) + " & " +
            std::to_string(totalBal);
     NOTICE(msg);
-    sendMessage(msg);
+    SendMessage(msg);
     success_trades_daily_ = 0;
     last_reset_success_trades_day_ = current_day;
   }

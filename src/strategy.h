@@ -1,5 +1,5 @@
-#ifndef _STRATEGY_H
-#define _STRATEGY_H
+#ifndef STANDX_SRC_STRATEGY_H_
+#define STANDX_SRC_STRATEGY_H_
 
 #include <list>
 #include <map>
@@ -13,11 +13,9 @@
 #include "standx_client.h"
 #include "tracer.h"
 
-using standx::StandXClient;
-
 class Strategy : public Poco::Runnable {
  public:
-  Strategy(std::shared_ptr<StandXClient> client);
+  Strategy(std::shared_ptr<standx::StandXClient> client);
 
   virtual ~Strategy();
   void run() override;
@@ -65,7 +63,7 @@ class Strategy : public Poco::Runnable {
 
   std::string instId_;
   std::shared_ptr<Poco::Thread> thread_;
-  std::shared_ptr<StandXClient> client_;
+  std::shared_ptr<standx::StandXClient> client_;
 
   Position long_pos_;
   Position short_pos_;
@@ -88,4 +86,4 @@ class Strategy : public Poco::Runnable {
   std::map<std::string, Order> short_grid_order_list_;
 };
 
-#endif
+#endif  // STANDX_SRC_STRATEGY_H_

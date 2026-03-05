@@ -21,18 +21,18 @@ std::map<char, std::string> kEscapingMap = {
     {'{', "%7B"}, {'}', "%7D"}, {'~', "%7E"}};
 }
 
-float safeStof(const std::string& str) {
+float SafeStof(const std::string& str) {
   if (str.empty()) return 0.0f;
 
   try {
     return std::stof(str);
   } catch (...) {
-    ERROR("safeStof error: " << str);
+    ERROR("SafeStof error: " << str);
     return 0.0f;
   }
 }
 
-std::string safeFtos(float value, int places) {
+std::string SafeFtos(float value, int places) {
   std::ostringstream oss;
   oss << std::fixed << std::setprecision(places);
   oss << value;
@@ -52,16 +52,15 @@ std::string BuildClOrdId(const std::string& inst_id, float price) {
   std::ostringstream ts;
   ts << std::put_time(&tm, "%Y%m%d%H%M%S");
 
-  return symbol + "_" + safeFtos(price, PRICE_ACCURACY_INT) + "_" +
-         ts.str();
+  return symbol + "_" + SafeFtos(price, PRICE_ACCURACY_INT) + "_" + ts.str();
 }
 
-bool areFloatsEqual(float a, float b, float epsilon) {
+bool AreFloatsEqual(float a, float b, float epsilon) {
   return std::fabs(a - b) < epsilon;
 }
 
-std::string adjustDecimalPlaces(float num, const std::string& epsilon) {
-  float epsilon_float = safeStof(epsilon);
+std::string AdjustDecimalPlaces(float num, const std::string& epsilon) {
+  float epsilon_float = SafeStof(epsilon);
   int precision = epsilon.size() - 2;
 
   num *= std::pow(10, precision);
@@ -79,21 +78,21 @@ std::string adjustDecimalPlaces(float num, const std::string& epsilon) {
   return oss.str();
 }
 
-std::string convertRemark(const std::string& remark) {
+std::string ConvertRemark(const std::string& remark) {
   std::string res;
-  for (int i = 0; i < remark.size(); ++i) {
+  for (size_t i = 0; i < remark.size(); ++i) {
     char c = remark.at(i);
     auto it = kEscapingMap.find(c);
     if (it != kEscapingMap.end()) {
-      res += kEscapingMap[c];
+      res += it->second;
     } else {
-      res += remark.at(i);
+      res += c;
     }
   }
   return res;
 }
 
-void sendMessage(const std::string& message, bool force) {
+void SendMessage(const std::string& message, bool force) {
   if (kConfig.barkServer.empty()) {
     return;
   }
@@ -108,7 +107,7 @@ void sendMessage(const std::string& message, bool force) {
     ring = "";
   }
 
-  std::string cmd = convertRemark(message);
+  std::string cmd = ConvertRemark(message);
   cmd = endpoint + cmd + ring;
   int result = system(cmd.c_str());
   (void)result;
