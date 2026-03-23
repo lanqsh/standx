@@ -68,11 +68,10 @@ class Strategy : public Poco::Runnable {
   Position long_pos_;
   Position short_pos_;
 
-  float base_price_{0.0};
   float current_price_{0.0};
   float current_fix_long_price_{0.0};
   float current_fix_short_price_{0.0};
-  float order_interval_{0.0};
+  float grid_step_{0.0};
   float grid_size_{0.1};
   int success_trades_total_{0};
   int success_trades_daily_{0};
