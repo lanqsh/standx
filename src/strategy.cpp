@@ -64,26 +64,11 @@ void Strategy::InitParameters() {
 
   grid_long_ = kConfig.gridLong;
   grid_short_ = kConfig.gridShort;
-  base_price_ = current_price_;
-  grid_size_ = DEFAULT_CONTRACT_SIZE;
-  order_interval_ = 0.1;
+  grid_size_ = kConfig.gridSize;
+  grid_step_ = kConfig.gridStep;
 
   Poco::DateTime now;
   last_reset_success_trades_day_ = now.day();
-
-  if (instId_ == "BTC-USD") {
-    grid_size_ = kConfig.subBtcSize;
-    base_price_ = 100000;
-    order_interval_ = 100;
-  } else if (instId_ == "ETH-USD") {
-    grid_size_ = kConfig.subEthSize;
-    base_price_ = 4000;
-    order_interval_ = 5;
-  } else if (instId_ == "SOL-USD") {
-    grid_size_ = kConfig.subSolSize;
-    base_price_ = 200;
-    order_interval_ = 0.25;
-  }
 }
 
 bool Strategy::UpdatePosition() {
@@ -107,9 +92,9 @@ void Strategy::UpdatePrice() {
   Ticker tk;
   if (client_->tickers(tk)) {
     current_price_ = tk.last;
-    int price_int = current_price_ / order_interval_;
-    current_fix_long_price_ = price_int * order_interval_;
-    current_fix_short_price_ = current_fix_long_price_ + order_interval_;
+    int price_int = current_price_ / grid_step_;
+    current_fix_long_price_ = price_int * grid_step_;
+    current_fix_short_price_ = current_fix_long_price_ + grid_step_;
     INFO("Current price: " << instId_ << " " << current_price_ << " "
                            << current_fix_long_price_ << " "
                            << current_fix_short_price_);
@@ -195,7 +180,7 @@ void Strategy::CheckFilledLongOrders() {
     if (tp) {
       int try_count = 3;
       float tp_price =
-          std::max(current_fix_long_price_, order.price) + order_interval_;
+          std::max(current_fix_long_price_, order.price) + grid_step_;
       order.size = grid_size_;
       order.tp_price = tp_price;
       order.side = "SELL";
@@ -241,7 +226,7 @@ void Strategy::CheckFilledLongOrders() {
         break;
       } else if (tmp.status == "NEW") {
         float tp_price =
-            std::max(current_fix_long_price_, order.price) + order_interval_;
+            std::max(current_fix_long_price_, order.price) + grid_step_;
         if (tmp.tp_price > tp_price + PRICE_ACCURACY_FLOAT && order.price > 0) {
           order.size = grid_size_;
           order.tp_price = tp_price;
@@ -329,7 +314,7 @@ void Strategy::CheckFilledShortOrders() {
     if (tp) {
       int try_count = 3;
       float tp_price =
-          std::min(current_fix_short_price_, order.price) - order_interval_;
+          std::min(current_fix_short_price_, order.price) - grid_step_;
       order.size = grid_size_;
       order.tp_price = tp_price;
       order.side = "BUY";
@@ -376,7 +361,7 @@ void Strategy::CheckFilledShortOrders() {
         break;
       } else if (tmp.status == "NEW") {
         float tp_price =
-            std::min(current_fix_short_price_, order.price) - order_interval_;
+            std::min(current_fix_short_price_, order.price) - grid_step_;
         if (tmp.tp_price < tp_price - PRICE_ACCURACY_FLOAT && order.price > 0) {
           order.size = grid_size_;
           order.tp_price = tp_price;
@@ -444,7 +429,7 @@ void Strategy::DeleteLongTpOrders() {
     auto& order = *it;
     if (order.is_reduce_only && order.size == grid_size_ &&
         order.price >
-            current_fix_long_price_ + order_interval_ * ORDER_NUM * 2) {
+            current_fix_long_price_ + grid_step_ * ORDER_NUM * 2) {
       client_->cancelOrder(order.cl_ord_id);
       it = unfilled_orders_.erase(it);
     } else {
@@ -458,7 +443,7 @@ void Strategy::DeleteLongPlaceOrders() {
     auto& order = *it;
     if (!order.is_reduce_only && order.size == grid_size_ &&
         order.price <
-            current_fix_long_price_ - order_interval_ * ORDER_NUM * 2) {
+            current_fix_long_price_ - grid_step_ * ORDER_NUM * 2) {
       client_->cancelOrder(order.cl_ord_id);
       auto price_str = AdjustDecimalPlaces(order.price, order_price_round_);
       auto itr = long_grid_order_list_.find(price_str);
@@ -477,7 +462,7 @@ void Strategy::DeleteShortTpOrders() {
     auto& order = *it;
     if (order.is_reduce_only && order.size == grid_size_ &&
         order.price <
-            current_fix_short_price_ - order_interval_ * ORDER_NUM * 2) {
+            current_fix_short_price_ - grid_step_ * ORDER_NUM * 2) {
       client_->cancelOrder(order.cl_ord_id);
       it = unfilled_orders_.erase(it);
     } else {
@@ -491,7 +476,7 @@ void Strategy::DeleteShortPlaceOrders() {
     auto& order = *it;
     if (!order.is_reduce_only && order.size == grid_size_ &&
         order.price >
-            current_fix_short_price_ + order_interval_ * ORDER_NUM * 2) {
+            current_fix_short_price_ + grid_step_ * ORDER_NUM * 2) {
       client_->cancelOrder(order.cl_ord_id);
       auto price_str = AdjustDecimalPlaces(order.price, order_price_round_);
       auto itr = short_grid_order_list_.find(price_str);
@@ -542,7 +527,7 @@ void Strategy::InitLongPlaceOrders() {
 void Strategy::InitShortPlaceOrders() {
   for (auto& order : unfilled_orders_) {
     if (!order.is_reduce_only && order.positionSide == "SHORT") {
-      auto price_str = AdjustDecimalPlaces(order.price + order_interval_,
+      auto price_str = AdjustDecimalPlaces(order.price + grid_step_,
                                            order_price_round_);
       if (short_grid_order_list_.find(price_str) ==
           short_grid_order_list_.end()) {
@@ -557,13 +542,13 @@ void Strategy::InitShortPlaceOrders() {
 void Strategy::InitLongTpOrders() {
   for (auto& order : unfilled_orders_) {
     if (order.is_reduce_only && order.positionSide == "LONG") {
-      auto price_str = AdjustDecimalPlaces(order.price - order_interval_,
+      auto price_str = AdjustDecimalPlaces(order.price - grid_step_,
                                            order_price_round_);
       if (long_grid_order_list_.find(price_str) ==
           long_grid_order_list_.end()) {
         NOTICE("Init tp long order not in grid list, price: "
                << order.price << ", price_str: " << price_str);
-        order.status = "FILLED";
+        order.status = "FILLED_CLOSE_WAIT";
         order.tp_cl_ord_id = order.cl_ord_id;
         order.tp_price = order.price;
         order.price = 0;
@@ -576,13 +561,13 @@ void Strategy::InitLongTpOrders() {
 void Strategy::InitShortTpOrders() {
   for (auto& order : unfilled_orders_) {
     if (order.is_reduce_only && order.positionSide == "SHORT") {
-      auto price_str = AdjustDecimalPlaces(order.price + order_interval_,
+      auto price_str = AdjustDecimalPlaces(order.price + grid_step_,
                                            order_price_round_);
       if (short_grid_order_list_.find(price_str) ==
           short_grid_order_list_.end()) {
         NOTICE("Init tp short order not in grid list, price: "
                << order.price << ", price_str: " << price_str);
-        order.status = "FILLED";
+        order.status = "FILLED_CLOSE_WAIT";
         order.tp_cl_ord_id = order.cl_ord_id;
         order.tp_price = order.price;
         order.price = 0;
@@ -594,9 +579,9 @@ void Strategy::InitShortTpOrders() {
 
 void Strategy::MakeLongPlaceOrders() {
   for (int i = 0; i < ORDER_NUM; ++i) {
-    float place_price = current_fix_long_price_ - order_interval_ * (i);
+    float place_price = current_fix_long_price_ - grid_step_ * (i);
     auto place_price_str = AdjustDecimalPlaces(place_price, order_price_round_);
-    if (current_price_ - place_price < order_interval_ * 0.5) continue;
+    if (current_price_ - place_price < grid_step_ * 0.5) continue;
 
     bool place_order_exists = std::any_of(
         unfilled_orders_.begin(), unfilled_orders_.end(),
@@ -616,7 +601,7 @@ void Strategy::MakeLongPlaceOrders() {
     } else if (it->second.status == "IDLE") {
       place_order_idle = true;
     }
-    if (current_price_ - place_price > order_interval_ * 2) {
+    if (current_price_ - place_price > grid_step_ * 2) {
       place_order_idle = true;
     }
     if (place_order_idle) {
@@ -645,9 +630,9 @@ void Strategy::MakeLongPlaceOrders() {
 
 void Strategy::MakeShortPlaceOrders() {
   for (int i = 0; i < ORDER_NUM; ++i) {
-    float place_price = current_fix_long_price_ + order_interval_ * (i);
+    float place_price = current_fix_long_price_ + grid_step_ * (i);
     auto place_price_str = AdjustDecimalPlaces(place_price, order_price_round_);
-    if (place_price - current_price_ < order_interval_ * 0.5) continue;
+    if (place_price - current_price_ < grid_step_ * 0.5) continue;
 
     bool place_order_exists = std::any_of(
         unfilled_orders_.begin(), unfilled_orders_.end(),
@@ -668,7 +653,7 @@ void Strategy::MakeShortPlaceOrders() {
       place_order_idle = true;
     }
 
-    if (place_price - current_price_ > order_interval_ * 2) {
+    if (place_price - current_price_ > grid_step_ * 2) {
       place_order_idle = true;
     }
     if (place_order_idle) {
@@ -744,9 +729,9 @@ void Strategy::MakeLongTpOrders() {
       break;
     }
 
-    float tp_price = current_fix_long_price_ + order_interval_ * (i + num);
+    float tp_price = current_fix_long_price_ + grid_step_ * (i + num);
     auto tp_price_str =
-        AdjustDecimalPlaces(tp_price - order_interval_, order_price_round_);
+        AdjustDecimalPlaces(tp_price - grid_step_, order_price_round_);
 
     bool tp_order_exists = std::any_of(
         unfilled_orders_.begin(), unfilled_orders_.end(),
@@ -795,9 +780,9 @@ void Strategy::MakeShortTpOrders() {
       break;
     }
 
-    float tp_price = current_fix_short_price_ - order_interval_ * (i + num);
+    float tp_price = current_fix_short_price_ - grid_step_ * (i + num);
     auto tp_price_str =
-        AdjustDecimalPlaces(tp_price + order_interval_, order_price_round_);
+        AdjustDecimalPlaces(tp_price + grid_step_, order_price_round_);
 
     bool tp_order_exists = std::any_of(
         unfilled_orders_.begin(), unfilled_orders_.end(),

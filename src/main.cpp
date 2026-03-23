@@ -36,9 +36,8 @@ void InitConfig() {
     kConfig.logLevel = config->getString("log.logLevel");
 
     kConfig.barkServer = config->getString("bark.server");
-    kConfig.subBtcSize = config->getDouble("sub.btcSize");
-    kConfig.subEthSize = config->getDouble("sub.ethSize");
-    kConfig.subSolSize = config->getDouble("sub.solSize");
+    kConfig.gridSize = config->getDouble("grid.size");
+    kConfig.gridStep = config->getDouble("grid.step");
     kConfig.gridLong = config->getBool("grid.long");
     kConfig.gridShort = config->getBool("grid.short");
 

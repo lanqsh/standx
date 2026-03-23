@@ -20,9 +20,8 @@ struct Config {
 
   std::string barkServer;
 
-  float subBtcSize;
-  float subEthSize;
-  float subSolSize;
+  float gridSize;
+  float gridStep;
   std::string uid;
 
   bool gridLong;
