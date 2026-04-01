@@ -55,6 +55,8 @@ secretKey = YOUR_SECRET_KEY_HERE
 chain = bsc
 grid.long = false
 grid.short = true
+grid.size = 0.001
+grid.step = 5
 
 order.lever = 10
 order.minAvailBal = 20
@@ -66,10 +68,6 @@ log.logSize = 100M
 log.logLevel = debug
 
 bark.server =
-
-sub.btcSize = 0.0001
-sub.ethSize = 0.001
-sub.solSize = 0.05
 ```
 
 Key fields:
@@ -77,9 +75,10 @@ Key fields:
 - `secretKey`: optional integration secret
 - `chain`: network name, e.g. `bsc`
 - `grid.long` / `grid.short`: enable long/short grid
+- `grid.size` / `grid.step`: grid order quantity and price step
 - `order.*`: leverage, min balance, whitelist/blacklist settings
+- `order.whiteList`: target symbol used by strategy startup (e.g. `ETH-USD`)
 - `log.*`: logger output settings
-- `sub.*Size`: default order size per symbol
 
 ### 🔨 Build
 
@@ -93,6 +92,7 @@ cmake --build . --config Release
 
 ```cpp
 #include "standx_client.h"
+#include "data.h"
 
 int main() {
     standx::StandXClient client("bsc", "your_private_key", "ETH-USD");
@@ -107,14 +107,19 @@ int main() {
     order.type = "LIMIT";
     order.size = 0.01f;
     order.price = 3000.0f;
+    order.cl_ord_id = "demo-order-001";
 
     if (client.placeOrder(order)) {
-        client.cancelOrder(order.id);
+        client.cancelOrder(order.cl_ord_id);
     }
 
     return 0;
 }
 ```
+
+Notes:
+- `placeOrder` requires non-empty `order.cl_ord_id`.
+- `tpOrder` requires non-empty `order.tp_cl_ord_id`.
 
 ### 📚 API Reference
 
@@ -132,7 +137,7 @@ bool positions(std::vector<Position>& positions_list);
 // Orders
 bool placeOrder(Order& order);
 bool tpOrder(Order& order);
-void cancelOrder(const std::string& id);
+void cancelOrder(const std::string& cl_ord_id);
 bool detail(Order& order);
 bool unfilledOrders(std::list<Order>& order_list);
 ```
@@ -217,6 +222,8 @@ secretKey = YOUR_SECRET_KEY_HERE
 chain = bsc
 grid.long = false
 grid.short = true
+grid.size = 0.001
+grid.step = 5
 
 order.lever = 10
 order.minAvailBal = 20
@@ -228,10 +235,6 @@ log.logSize = 100M
 log.logLevel = debug
 
 bark.server =
-
-sub.btcSize = 0.0001
-sub.ethSize = 0.001
-sub.solSize = 0.05
 ```
 
 主要字段：
@@ -239,9 +242,10 @@ sub.solSize = 0.05
 - `secretKey`：可选集成密钥
 - `chain`：链/网络（如 `bsc`）
 - `grid.long` / `grid.short`：是否启用多/空网格
+- `grid.size` / `grid.step`：网格下单数量与价格步长
 - `order.*`：杠杆、最小余额、黑白名单
+- `order.whiteList`：策略启动时使用的交易对（如 `ETH-USD`）
 - `log.*`：日志配置
-- `sub.*Size`：各合约默认下单量
 
 ### 🔨 编译
 
@@ -267,10 +271,14 @@ bool positions(std::vector<Position>& positions_list);
 // 订单
 bool placeOrder(Order& order);
 bool tpOrder(Order& order);
-void cancelOrder(const std::string& id);
+void cancelOrder(const std::string& cl_ord_id);
 bool detail(Order& order);
 bool unfilledOrders(std::list<Order>& order_list);
 ```
+
+说明：
+- `placeOrder` 要求 `order.cl_ord_id` 非空。
+- `tpOrder` 要求 `order.tp_cl_ord_id` 非空。
 
 ### 🏗️ 架构设计
 
