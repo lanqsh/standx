@@ -527,8 +527,8 @@ void Strategy::InitLongPlaceOrders() {
 void Strategy::InitShortPlaceOrders() {
   for (auto& order : unfilled_orders_) {
     if (!order.is_reduce_only && order.positionSide == "SHORT") {
-      auto price_str = AdjustDecimalPlaces(order.price + grid_step_,
-                                           order_price_round_);
+      auto price_str =
+          AdjustDecimalPlaces(order.price, order_price_round_);
       if (short_grid_order_list_.find(price_str) ==
           short_grid_order_list_.end()) {
         NOTICE("Init place short order not in grid list, price: "
@@ -630,7 +630,7 @@ void Strategy::MakeLongPlaceOrders() {
 
 void Strategy::MakeShortPlaceOrders() {
   for (int i = 0; i < ORDER_NUM; ++i) {
-    float place_price = current_fix_long_price_ + grid_step_ * (i);
+    float place_price = current_fix_short_price_ + grid_step_ * (i);
     auto place_price_str = AdjustDecimalPlaces(place_price, order_price_round_);
     if (place_price - current_price_ < grid_step_ * 0.5) continue;
 
