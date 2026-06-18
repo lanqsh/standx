@@ -45,6 +45,9 @@ std::string HttpClient::perform_request_internal(const std::string& url,
   curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
   curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
 
+  curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 5L);
+  curl_easy_setopt(curl, CURLOPT_TIMEOUT, 5L);
+
   if (!method.empty()) {
     curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, method.c_str());
   }
