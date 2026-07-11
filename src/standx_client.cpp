@@ -64,12 +64,11 @@ bool StandXClient::balance(float& availBal, float& totalBal) {
     std::string response = request_with_retry(url);
     auto json = nlohmann::json::parse(response);
 
-    if (json.contains("cross_available") &&
-        json["cross_available"].is_string()) {
-      availBal = SafeStof(json["cross_available"].get<std::string>());
+    if (json.contains("balance") && json["balance"].is_string()) {
+      availBal = SafeStof(json["balance"].get<std::string>());
     }
-    if (json.contains("cross_balance") && json["cross_balance"].is_string()) {
-      totalBal = SafeStof(json["cross_balance"].get<std::string>());
+    if (json.contains("equity") && json["equity"].is_string()) {
+      totalBal = SafeStof(json["equity"].get<std::string>());
     }
 
     return true;
