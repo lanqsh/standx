@@ -745,7 +745,7 @@ void Strategy::MakeLongTpOrders() {
       break;
     }
 
-    float tp_price = current_fix_long_price_ + grid_step_ * (i + num);
+    float tp_price = current_fix_long_price_ + grid_step_ * (i + 2);
     auto tp_price_str =
         AdjustDecimalPlaces(tp_price - grid_step_, order_price_round_);
 
@@ -803,7 +803,7 @@ void Strategy::MakeShortTpOrders() {
       break;
     }
 
-    float tp_price = current_fix_short_price_ - grid_step_ * (i + num);
+    float tp_price = current_fix_short_price_ - grid_step_ * (i + 2);
     auto tp_price_str =
         AdjustDecimalPlaces(tp_price + grid_step_, order_price_round_);
 
