@@ -168,6 +168,7 @@ bool StandXClient::unfilledOrders(std::list<Order>& order_list) {
 
     if (json.contains("result") && json["result"].is_array()) {
       order_list.clear();
+      INFO("unfilledOrders: total " << json["result"].size() << " orders");
       for (const auto& item : json["result"]) {
         Order order;
 
@@ -212,6 +213,14 @@ bool StandXClient::unfilledOrders(std::list<Order>& order_list) {
         }
 
         order_list.push_back(order);
+
+        INFO("  Order: " << order.cl_ord_id
+             << ", side=" << order.side
+             << ", positionSide=" << order.positionSide
+             << ", price=" << order.price
+             << ", size=" << order.size
+             << ", reduce_only=" << (order.is_reduce_only ? "true" : "false")
+             << ", status=" << order.status);
       }
     }
 

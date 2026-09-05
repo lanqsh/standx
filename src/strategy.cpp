@@ -632,7 +632,14 @@ void Strategy::MakeShortPlaceOrders() {
   for (int i = 0; i < ORDER_NUM; ++i) {
     float place_price = current_fix_short_price_ + grid_step_ * (i);
     auto place_price_str = AdjustDecimalPlaces(place_price, order_price_round_);
-    if (place_price - current_price_ < grid_step_ * 0.5) continue;
+
+    INFO("MakeShortPlaceOrders i=" << i << ", place_price=" << place_price
+         << ", current_price_=" << current_price_);
+
+    if (place_price - current_price_ < grid_step_ * 0.5) {
+      INFO("  Skip: too close to current price, diff=" << (place_price - current_price_));
+      continue;
+    }
 
     bool place_order_exists = std::any_of(
         unfilled_orders_.begin(), unfilled_orders_.end(),
@@ -642,20 +649,27 @@ void Strategy::MakeShortPlaceOrders() {
         });
 
     if (place_order_exists) {
+      INFO("  Skip: place_order_exists in unfilled_orders");
       continue;
     }
 
     bool place_order_idle = false;
     auto it = short_grid_order_list_.find(place_price_str);
     if (it == short_grid_order_list_.end()) {
+      INFO("  Not in grid_list, set idle=true");
       place_order_idle = true;
     } else if (it->second.status == "IDLE") {
+      INFO("  In grid_list with status=IDLE, set idle=true");
       place_order_idle = true;
+    } else {
+      INFO("  In grid_list with status=" << it->second.status << ", idle=false");
     }
 
     if (place_price - current_price_ > grid_step_ * 2) {
+      INFO("  Price too far, force idle=true, diff=" << (place_price - current_price_));
       place_order_idle = true;
     }
+
     if (place_order_idle) {
       Order order;
       order.side = "SELL";
@@ -675,6 +689,8 @@ void Strategy::MakeShortPlaceOrders() {
       } else {
         NOTICE("Failed to place short order");
       }
+    } else {
+      INFO("  Skip: place_order_idle=false, not placing order");
     }
   }
 }
@@ -774,8 +790,15 @@ void Strategy::MakeLongTpOrders() {
 
 void Strategy::MakeShortTpOrders() {
   int num = 5;
+  INFO("MakeShortTpOrders start, short_pos_.positionAmt=" << short_pos_.positionAmt
+       << ", short_reduce_size_=" << short_reduce_size_
+       << ", grid_size_=" << grid_size_);
+
   for (int i = 0; i < num; ++i) {
     if (fabs(short_pos_.positionAmt) - short_reduce_size_ < grid_size_) {
+      INFO("  Position not enough, need increase. fabs(positionAmt)="
+           << fabs(short_pos_.positionAmt) << " - reduce_size=" << short_reduce_size_
+           << " < grid_size=" << grid_size_);
       IncreaseShortPosition();
       break;
     }
@@ -783,6 +806,9 @@ void Strategy::MakeShortTpOrders() {
     float tp_price = current_fix_short_price_ - grid_step_ * (i + num);
     auto tp_price_str =
         AdjustDecimalPlaces(tp_price + grid_step_, order_price_round_);
+
+    INFO("MakeShortTpOrders i=" << i << ", tp_price=" << tp_price
+         << ", tp_price_str=" << tp_price_str << " (+" << grid_step_ << ")");
 
     bool tp_order_exists = std::any_of(
         unfilled_orders_.begin(), unfilled_orders_.end(),
@@ -792,6 +818,7 @@ void Strategy::MakeShortTpOrders() {
         });
 
     if (tp_order_exists) {
+      INFO("  Skip: tp_order_exists in unfilled_orders");
       continue;
     }
 
@@ -804,6 +831,12 @@ void Strategy::MakeShortTpOrders() {
     order.size = grid_size_;
 
     auto it = short_grid_order_list_.find(tp_price_str);
+    if (it != short_grid_order_list_.end()) {
+      INFO("  Found in grid_list, status=" << it->second.status);
+    } else {
+      INFO("  Not found in grid_list");
+    }
+
     if (client_->tpOrder(order)) {
       SyncTpOrderId(order);
       short_reduce_size_ += grid_size_;
